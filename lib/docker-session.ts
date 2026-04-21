@@ -63,6 +63,7 @@ export async function ensureImageBuilt(): Promise<void> {
       context: DOCKERFILE_CONTEXT,
       src: [
         "Dockerfile",
+        "myworkspaces-prompt.sh",
         "templates/describe_image.ts",
         "templates/read_excel.ts",
         "templates/vision-rules.md",

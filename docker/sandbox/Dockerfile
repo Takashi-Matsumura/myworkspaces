@@ -41,6 +41,21 @@ RUN { \
     echo 'bind "set enable-bracketed-paste on" 2>/dev/null || true'; \
   } >> /etc/bash.bashrc
 
+# Bash パネル用の 2 段プロンプト。上段: cwd (+ git ブランチ) / 下段: '# '。
+# /root は named volume なので /root/.bashrc に直書きしても既存ユーザーに
+# 配布できない。さらに Ubuntu 既定の /root/.bashrc は末尾で PS1 を設定するため、
+# 単に /etc/bash.bashrc で PS1 を export しても ~/.bashrc に負ける。
+#
+# → /etc/profile.d/ にスクリプトを置き、PROMPT_COMMAND フックで毎プロンプト
+#   に PS1 を再設定する。bash -l (login shell) では /etc/profile から
+#   /etc/profile.d/*.sh が読まれ、~/.bashrc 読み込み後もプロンプト描画前に
+#   __myworkspaces_prompt が走って PS1 を上書きするので既存ユーザーにも効く。
+#
+# 注: dockerode の classic builder は RUN heredoc を展開しないため、
+#     ファイルは別途用意して COPY する。
+COPY myworkspaces-prompt.sh /etc/profile.d/myworkspaces-prompt.sh
+RUN chmod 0644 /etc/profile.d/myworkspaces-prompt.sh
+
 # Node.js 22 (NodeSource binary)。opencode と read_excel.ts が依存する。
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
