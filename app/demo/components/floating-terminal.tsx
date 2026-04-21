@@ -1,0 +1,342 @@
+"use client";
+
+import {
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
+import dynamic from "next/dynamic";
+import { X, Minus, Maximize2, ArrowUpDown } from "lucide-react";
+import type { View, SceneRect } from "./whiteboard-canvas";
+
+const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
+
+type ScenePos = { x: number; y: number };
+type SceneSize = { w: number; h: number };
+
+export type TerminalSession = { workspaceId: string; cwd: string; nonce: number };
+export type TerminalVariant = "coding" | "business" | "ubuntu";
+
+type VariantStyle = {
+  label: string;
+  headerBg: string;
+  headerText: string;
+  headerBorder: string;
+  panelBorder: string;
+  panelBg: string;
+  filter?: string;
+};
+
+const VARIANT_STYLES: Record<TerminalVariant, VariantStyle> = {
+  coding: {
+    label: "opencode — coding",
+    headerBg: "bg-[#15151c]",
+    headerText: "text-white/70",
+    headerBorder: "border-white/10 border-t-2 border-t-emerald-500",
+    panelBorder: "border border-white/10 shadow-black/50",
+    panelBg: "#0b0b0f",
+  },
+  business: {
+    label: "opencode — business",
+    headerBg: "bg-[#217346]",
+    headerText: "text-white",
+    headerBorder: "border-[#b7d9b7]",
+    panelBorder: "border border-[#b7d9b7] shadow-green-900/20",
+    panelBg: "#eaf5ea",
+    filter:
+      "invert(0.93) sepia(0.2) hue-rotate(75deg) saturate(1.8) contrast(1.15) brightness(1.02)",
+  },
+  ubuntu: {
+    label: "ubuntu — bash",
+    headerBg: "bg-[#1e1b4b]",
+    headerText: "text-white/70",
+    headerBorder: "border-white/10 border-t-2 border-t-indigo-400",
+    panelBorder: "border border-white/10 shadow-black/50",
+    panelBg: "#0b0b0f",
+  },
+};
+
+function defaultSlotOffset(slot: "left" | "center" | "right"): { cx: number; cy: number } {
+  if (typeof window === "undefined") return { cx: 80, cy: 80 };
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (slot === "left") {
+    return { cx: Math.max(0, w * 0.25 - 360), cy: Math.max(0, (h - 440) / 2) };
+  }
+  if (slot === "right") {
+    return { cx: w * 0.55, cy: Math.max(0, (h - 440) / 2) };
+  }
+  return { cx: Math.max(0, (w - 720) / 2), cy: Math.max(0, (h - 440) / 2) };
+}
+
+export default function FloatingTerminal({
+  view,
+  session,
+  onStop,
+  onZoomToFit,
+  variant = "coding",
+  slot = "left",
+}: {
+  view: View;
+  session: TerminalSession | null;
+  onStop: () => void;
+  onZoomToFit?: (rect: SceneRect) => void;
+  variant?: TerminalVariant;
+  slot?: "left" | "center" | "right";
+}) {
+  const style = VARIANT_STYLES[variant];
+
+  const [scenePos, setScenePos] = useState<ScenePos>(() => {
+    const { cx, cy } = defaultSlotOffset(slot);
+    return { x: cx, y: cy };
+  });
+  const [sceneSize, setSceneSize] = useState<SceneSize>({ w: 720, h: 440 });
+  const [minimized, setMinimized] = useState(false);
+  const [flipped, setFlipped] = useState(false);
+  const [backNonce, setBackNonce] = useState(0);
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window === "undefined") return 13;
+    const saved = localStorage.getItem(`terminal-fontSize-${variant}`);
+    return saved ? Number(saved) : 13;
+  });
+
+  const changeFontSize = (delta: number) => {
+    setFontSize((prev) => {
+      const next = Math.min(28, Math.max(10, prev + delta));
+      localStorage.setItem(`terminal-fontSize-${variant}`, String(next));
+      return next;
+    });
+  };
+
+  const dragRef = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
+  const resizeRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null);
+
+  const onHeaderPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { sx: e.clientX, sy: e.clientY, px: scenePos.x, py: scenePos.y };
+  };
+  const onHeaderPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const d = dragRef.current;
+    setScenePos({
+      x: d.px + (e.clientX - d.sx) / view.zoom,
+      y: d.py + (e.clientY - d.sy) / view.zoom,
+    });
+  };
+  const onHeaderPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    dragRef.current = null;
+  };
+
+  const onResizePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    resizeRef.current = { sx: e.clientX, sy: e.clientY, sw: sceneSize.w, sh: sceneSize.h };
+  };
+  const onResizePointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!resizeRef.current) return;
+    const r = resizeRef.current;
+    setSceneSize({
+      w: Math.max(320, r.sw + (e.clientX - r.sx) / view.zoom),
+      h: Math.max(180, r.sh + (e.clientY - r.sy) / view.zoom),
+    });
+  };
+  const onResizePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    resizeRef.current = null;
+  };
+
+  const handleFlip = () => {
+    if (!flipped && backNonce === 0) setBackNonce(Date.now());
+    setFlipped((f) => !f);
+  };
+
+  const left = (scenePos.x + view.x) * view.zoom;
+  const top = (scenePos.y + view.y) * view.zoom;
+
+  // Ubuntu variant は表面が既にシェル。他の variant は表面が opencode、裏面がシェル。
+  const frontCmd: "opencode" | "shell" = variant === "ubuntu" ? "shell" : "opencode";
+  const backAvailable = variant !== "ubuntu"; // Ubuntu は裏面なし (表面と同じ bash)
+
+  const headerBar = (title: string) => (
+    <div
+      className={`flex h-9 cursor-grab items-center gap-2 rounded-t-lg border-b px-3 text-xs active:cursor-grabbing select-none ${style.headerBorder} ${style.headerBg} ${style.headerText}`}
+      onPointerDown={onHeaderPointerDown}
+      onPointerMove={onHeaderPointerMove}
+      onPointerUp={onHeaderPointerUp}
+    >
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onStop}
+          className="group h-3 w-3 rounded-full bg-[#ff5f57] hover:brightness-110"
+          title="ターミナルを閉じる"
+        >
+          <X className="hidden h-3 w-3 stroke-[3] text-black/60 group-hover:block" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setMinimized((m) => !m)}
+          className="group h-3 w-3 rounded-full bg-[#febc2e] hover:brightness-110"
+          title={minimized ? "元に戻す" : "最小化"}
+        >
+          <Minus className="hidden h-3 w-3 stroke-[3] text-black/60 group-hover:block" />
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onZoomToFit?.({ x: scenePos.x, y: scenePos.y, w: sceneSize.w, h: sceneSize.h })
+          }
+          className="group h-3 w-3 rounded-full bg-[#28c840] hover:brightness-110"
+          title="80% フィット表示"
+        >
+          <Maximize2 className="hidden h-2.5 w-2.5 stroke-[3] text-black/60 group-hover:block" style={{ margin: "0.5px" }} />
+        </button>
+      </div>
+      <span className="ml-1 flex-1 font-mono">{title}</span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => changeFontSize(-1)}
+          className="rounded px-1 text-[10px] opacity-60 hover:bg-white/10 hover:opacity-100"
+          title="文字サイズを下げる"
+        >
+          A-
+        </button>
+        <span className="font-mono text-[10px] opacity-60 min-w-[1.5rem] text-center">{fontSize}</span>
+        <button
+          type="button"
+          onClick={() => changeFontSize(1)}
+          className="rounded px-1 text-[10px] opacity-60 hover:bg-white/10 hover:opacity-100"
+          title="文字サイズを上げる"
+        >
+          A+
+        </button>
+        {backAvailable && (
+          <button
+            type="button"
+            onClick={handleFlip}
+            className="ml-1 rounded p-0.5 opacity-60 hover:bg-white/10 hover:opacity-100"
+            title={flipped ? "表面に戻す" : "シェルを開く"}
+          >
+            <ArrowUpDown className="h-3.5 w-3.5 rotate-90" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className="fixed z-50"
+      style={{
+        left: 0,
+        top: 0,
+        width: sceneSize.w,
+        height: minimized ? 36 : sceneSize.h,
+        transform: `translate(${left}px, ${top}px) scale(${view.zoom})`,
+        transformOrigin: "top left",
+        perspective: 1200,
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          transformStyle: "preserve-3d",
+          transition: "transform 0.6s ease-in-out",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        }}
+      >
+        {/* Front */}
+        <div
+          className={`flex flex-col rounded-lg shadow-2xl backdrop-blur ${style.panelBorder}`}
+          style={{
+            position: "absolute",
+            inset: 0,
+            backfaceVisibility: "hidden",
+            backgroundColor: style.panelBg,
+          }}
+        >
+          {headerBar(style.label)}
+          {!minimized && (
+            <div
+              className="relative flex-1 overflow-hidden rounded-b-lg bg-[#0b0b0f]"
+              style={style.filter ? { filter: style.filter } : undefined}
+            >
+              {session ? (
+                <XtermView
+                  key={`${session.nonce}-${fontSize}-front`}
+                  cwd={session.cwd}
+                  cmd={frontCmd}
+                  fontSize={fontSize}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
+                  Workspace を選んでからボタンで起動してください
+                </div>
+              )}
+              <div
+                className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
+                onPointerDown={onResizePointerDown}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={onResizePointerUp}
+                style={{
+                  background: "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)",
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Back (ubuntu variant 以外) */}
+        {backAvailable && (
+          <div
+            className={`flex flex-col rounded-lg shadow-2xl backdrop-blur ${style.panelBorder}`}
+            style={{
+              position: "absolute",
+              inset: 0,
+              backfaceVisibility: "hidden",
+              transform: "rotateY(180deg)",
+              backgroundColor: style.panelBg,
+            }}
+          >
+            {headerBar(`${style.label} — shell`)}
+            {!minimized && (
+              <div
+                className="relative flex-1 overflow-hidden rounded-b-lg bg-[#0b0b0f]"
+                style={style.filter ? { filter: style.filter } : undefined}
+              >
+                {backNonce > 0 && session ? (
+                  <XtermView
+                    key={`${backNonce}-${fontSize}-back`}
+                    cwd={session.cwd}
+                    cmd="shell"
+                    fontSize={fontSize}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
+                    シェル (bash) を起動するにはフリップしてください
+                  </div>
+                )}
+                <div
+                  className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
+                  onPointerDown={onResizePointerDown}
+                  onPointerMove={onResizePointerMove}
+                  onPointerUp={onResizePointerUp}
+                  style={{
+                    background: "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)",
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}

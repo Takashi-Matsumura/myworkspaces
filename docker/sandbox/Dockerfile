@@ -1,0 +1,87 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# サンドボックス内で使う基本ツール一式。
+# - 開発用: vim / nano / git / less / curl / procps
+# - apt が `_apt` へ降格するのに必要: ca-certificates
+# - Node.js ビルド (native addon) 用: build-essential / python3
+# - opencode install スクリプト用: unzip
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      git \
+      less \
+      nano \
+      procps \
+      vim \
+      unzip \
+      build-essential \
+      python3 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# ブラウザ内ターミナル (xterm.js) から bash に貼り付けたときに、
+# readline が paste 全体を 1 ブロックとして扱えるよう bracketed paste を強制 ON。
+# 既定で ON のはずだが、コンテナ内 bash で効かないケースがあるため明示する。
+# /root/.inputrc は named volume 側で上書き消失するので /etc/inputrc に書く。
+RUN { \
+    echo 'set enable-bracketed-paste on'; \
+    echo 'set editing-mode emacs'; \
+    echo 'set blink-matching-paren on'; \
+    echo '"\e[A": history-search-backward'; \
+    echo '"\e[B": history-search-forward'; \
+  } >> /etc/inputrc
+
+# bash 起動時に readline 設定を読み直して bracketed paste を必ず適用する。
+# (ログインシェルで inputrc が読まれないパスを補完するため)
+RUN { \
+    echo '# myworkspaces: force readline bracketed paste'; \
+    echo 'bind "set enable-bracketed-paste on" 2>/dev/null || true'; \
+  } >> /etc/bash.bashrc
+
+# Node.js 22 (NodeSource binary)。opencode と read_excel.ts が依存する。
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# opencode CLI。公式 installer は /root/.opencode/bin/ に置くが、
+# /root は named volume になるのでイメージ側に保持できない。
+# /usr/local/bin/opencode にバイナリを移して、/root の汚染を避ける。
+#
+# opencode のバージョン: 1.14.x を採用。以前 1.4.6 に pin していたのは
+# 「1.14.x で Gemma 4 の build agent が 0 トークン silent 失敗」という観察からだが、
+# 真因は別所 (llama-server 側の --reasoning-format 未指定 / xlsx のグローバル解決失敗) で、
+# 2026-04 時点で両方修正済み。1.4.6 は Gemma 4 のネイティブ Harmony 形式
+# (<|channel>thought ... <channel|> ...) を parse できず TUI に生テキスト＋
+# "Failed to parse input at pos 13" が出るため、Harmony 対応済みの 1.14.x に戻す。
+ARG OPENCODE_VERSION=1.14.19
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VERSION} --no-modify-path && \
+    mv /root/.opencode/bin/opencode /usr/local/bin/opencode && \
+    rm -rf /root/.opencode
+
+# read_excel.ts が require する xlsx をグローバルに入れておく。
+# （ワークスペースごとに npm install する手間を省くため）
+RUN npm install -g xlsx
+
+# opencode のカスタムツール (read_excel.ts) が ESM import で xlsx を解決できるよう、
+# グローバル node_modules を NODE_PATH に入れる。未設定だと tsx の resolver が
+# "/root/workspaces/<id>/.opencode/tools/read_excel.ts" の隣から node_modules を辿り、
+# "Cannot find package 'xlsx'" でツールロードが即死 → opencode が無反応になる。
+ENV NODE_PATH=/usr/lib/node_modules
+
+# describe_image.ts / read_excel.ts / vision-rules.md / business-rules.md の
+# テンプレート。新規ワークスペース作成時に /root/workspaces/{id}/ へコピーして
+# 使う。イメージ内の固定配置先は /opt/myworkspaces/templates/。
+RUN mkdir -p /opt/myworkspaces/templates/.opencode/tools
+COPY templates/describe_image.ts /opt/myworkspaces/templates/.opencode/tools/
+COPY templates/read_excel.ts /opt/myworkspaces/templates/.opencode/tools/
+COPY templates/vision-rules.md /opt/myworkspaces/templates/
+COPY templates/business-rules.md /opt/myworkspaces/templates/
+COPY templates/opencode.json /opt/myworkspaces/templates/
+
+WORKDIR /root
+
+# docker-session 側で ["sleep", "infinity"] を上書き指定するのでここでは省略。
