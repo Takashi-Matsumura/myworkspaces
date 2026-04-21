@@ -752,7 +752,7 @@ export default function FloatingWorkspace({
             onClick={onStartCoding}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#15151c] bg-[#15151c] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#2a2a35] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Coding を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Coding パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <CodeXml className="h-3.5 w-3.5 shrink-0" />
             Coding
@@ -762,7 +762,7 @@ export default function FloatingWorkspace({
             onClick={onStartBusiness}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#217346] bg-[#217346] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#1a5c38] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Business を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Business パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <CodeXml className="h-3.5 w-3.5 shrink-0" />
             Business
@@ -772,7 +772,7 @@ export default function FloatingWorkspace({
             onClick={onStartUbuntu}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-indigo-700 bg-indigo-700 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Bash を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Bash パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
             Bash
@@ -923,7 +923,7 @@ export default function FloatingWorkspace({
                   setFlipped(false);
                 }}
                 className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
-                title="ワークスペースに戻る"
+                title="Workspace パネルに戻る"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
               </button>

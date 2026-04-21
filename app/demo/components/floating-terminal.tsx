@@ -175,7 +175,7 @@ export default function FloatingTerminal({
           type="button"
           onClick={onStop}
           className="group h-3 w-3 rounded-full bg-[#ff5f57] hover:brightness-110"
-          title="ターミナルを閉じる"
+          title="パネルを閉じる"
         >
           <X className="hidden h-3 w-3 stroke-[3] text-black/60 group-hover:block" />
         </button>
@@ -284,7 +284,7 @@ export default function FloatingTerminal({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
-                  Workspace を選んでからボタンで起動してください
+                  Workspace パネルからワークスペースを選択して起動してください
                 </div>
               )}
               <div

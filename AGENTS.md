@@ -8,9 +8,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 myworkspaces は [opencode-demo](https://github.com/Takashi-Matsumura/opencode-demo) と [ptyserver-demo](https://github.com/Takashi-Matsumura/ptyserver-demo) を合成したもの:
 
-- **ベース UI**: opencode-demo（Excalidraw ホワイトボード + フロートターミナル + ファイルツリー）
+- **ベース UI**: opencode-demo（Excalidraw ホワイトボード + フロートパネル + ファイルツリー）
 - **実行環境**: ptyserver-demo（dockerode でユーザー用 Docker コンテナを管理、bash アタッチ）
-- 3 種のターミナル: **Coding** (opencode) / **Business** (opencode + 裏面で Excel/設定) / **Bash** (素の Ubuntu bash)
+- UI 用語は **「パネル」** で統一: ホワイトボード上にフロートする矩形領域（Workspace / Coding / Business / Bash の各パネル）。「ウィンドウ」とは呼ばない。
+- 3 種のターミナルパネル: **Coding** (opencode) / **Business** (opencode + 裏面で Excel/設定) / **Bash** (素の Ubuntu bash)
 - ユーザーごとに 1 つのコンテナ `myworkspaces-shell-{sub}`（イメージ `myworkspaces-sandbox:latest`）を永続維持。`/root` は named volume `myworkspaces-home-{sub}`
 - ワークスペースは `/root/workspaces/{id}/` 固定。複数作成・切替可能
 - 認証は将来置き換える前提で、現状は sub="demo" 固定（`lib/user.ts` の `getSub()` を書き換えると OIDC に差し替えやすい）
@@ -30,7 +31,7 @@ docker/sandbox/
   Dockerfile                 # ubuntu:24.04 + Node.js + opencode CLI + vim/git/curl 等
   templates/                 # 新規ワークスペース初期化時にコピーする雛形
 app/
-  page.tsx                   # 3 ターミナル + ワークスペースパネル + フッター
+  page.tsx                   # 4 パネル (Workspace + Coding/Business/Bash) + フッター
   demo/components/           # UI コンポーネント群 (whiteboard / floating-* / xterm-view)
   api/
     user/workspaces/         # ワークスペース CRUD

@@ -1,7 +1,7 @@
 # myworkspaces
 
 ブラウザのホワイトボードから、ユーザーごとに隔離された Docker サンドボックスに入れる Next.js アプリ。
-各ユーザーのコンテナには [OpenCode](https://opencode.ai/) CLI と Ubuntu の bash が入っていて、フロートするターミナルから **Coding (opencode)** / **Business (opencode)** / **Bash (素の Ubuntu)** の 3 種類を使い分けられる。
+各ユーザーのコンテナには [OpenCode](https://opencode.ai/) CLI と Ubuntu の bash が入っていて、ホワイトボード上にフロートするターミナルパネルから **Coding (opencode)** / **Business (opencode)** / **Bash (素の Ubuntu)** の 3 種類を使い分けられる。
 
 > ⚠️ **これは開発・検証用のデモ実装です。**
 > 認証は `sub="demo"` 固定で、ホストの Docker socket を使います。そのままインターネットに公開しないでください（詳細は「セキュリティ注意」セクション）。
@@ -10,8 +10,8 @@
 
 - 🖼️ **Excalidraw の無限ホワイトボード** を背景に、必要なパネルをフロートで開く UI
 - 🐳 **ユーザーごとに 1 つのコンテナ** (`myworkspaces-shell-{sub}`) を永続起動し、`/root` は named volume で保持
-- 📂 **1 コンテナに複数ワークスペース** (`/root/workspaces/{id}`) — UI から作成・切替・リネーム・削除
-- 💻 **3 種類のターミナル**
+- 📂 **1 コンテナに複数ワークスペース** (`/root/workspaces/{id}`) — Workspace パネルから作成・切替・リネーム・削除
+- 💻 **3 種類のターミナルパネル**
   - **Coding** — `opencode` を起動した対話シェル（コード支援向け）
   - **Business** — `opencode` を別プロファイルで起動（業務・文書向け、裏面で Excel 等）
   - **Bash** — 素の Ubuntu bash
@@ -56,7 +56,7 @@ npm run dev
 
 初回起動時に `myworkspaces-sandbox:latest` イメージが自動ビルドされる（1〜2 分、opencode CLI を `curl | bash` で取得するため外部ネットワークが必要）。以降は skip される。
 
-ブラウザで http://localhost:3000 を開くと、ホワイトボード上に Workspace パネルが出る。「新規」でワークスペースを作成してから、Coding / Business / Bash のいずれかのボタンでターミナルを起動する。
+ブラウザで http://localhost:3000 を開くと、ホワイトボード上に Workspace パネルが出る。「新規」でワークスペースを作成してから、Coding / Business / Bash のいずれかのボタンでターミナルパネルを起動する。
 
 ## スクリプト
 
@@ -69,8 +69,8 @@ npm run dev
 
 ## 使い方
 
-1. **ワークスペースを作る** — 右上の Workspace パネルで「新規」をクリック。`/root/workspaces/{id}` が作られ、雛形（`docker/sandbox/templates/`）がコピーされる。
-2. **ターミナルを開く** — Coding / Business / Bash のいずれか。フロートターミナルが開き、選択中のワークスペースを `cwd` にしてコンテナ内で PTY が起動する。
+1. **ワークスペースを作る** — Workspace パネルで「新規」をクリック。`/root/workspaces/{id}` が作られ、雛形（`docker/sandbox/templates/`）がコピーされる。
+2. **ターミナルパネルを開く** — Coding / Business / Bash のいずれか。パネルが開き、選択中のワークスペースを `cwd` にしてコンテナ内で PTY が起動する。
 3. **ファイルを編集** — ファイルツリーからクリックで開き、ローカル GUI エディタや opencode から編集。DnD でアップロードも可能。
 4. **コンテナをリセット** — フッター左の 🔄 アイコンで「コンテナ作り直し」。`/root` 以外を初期化する（`apt install` したものは消えるが、ワークスペースと雛形は残る）。
 
@@ -120,7 +120,7 @@ WebSocket: `GET /ws/pty?cwd=<path>&cmd=opencode|shell&sessionId=<optional>` — 
 
 ## 謝辞
 
-- [opencode-demo](https://github.com/Takashi-Matsumura/opencode-demo) — Excalidraw ホワイトボード + フロートターミナル + ファイルツリーの UI 部分
+- [opencode-demo](https://github.com/Takashi-Matsumura/opencode-demo) — Excalidraw ホワイトボード + フロートパネル + ファイルツリーの UI 部分
 - [ptyserver-demo](https://github.com/Takashi-Matsumura/ptyserver-demo) — dockerode でユーザー専用コンテナを管理し、bash にアタッチする仕組み
 - [OpenCode](https://opencode.ai/) — コンテナに焼き込んでいる CLI
 - [Excalidraw](https://github.com/excalidraw/excalidraw), [xterm.js](https://xtermjs.org/)
