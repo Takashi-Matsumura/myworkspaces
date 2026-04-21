@@ -76,6 +76,8 @@ export default function FloatingTerminal({
   onZoomToFit,
   variant = "coding",
   slot = "left",
+  z,
+  onFocus,
 }: {
   view: View;
   session: TerminalSession | null;
@@ -83,6 +85,8 @@ export default function FloatingTerminal({
   onZoomToFit?: (rect: SceneRect) => void;
   variant?: TerminalVariant;
   slot?: "left" | "center" | "right";
+  z: number;
+  onFocus?: () => void;
 }) {
   const style = VARIANT_STYLES[variant];
 
@@ -229,7 +233,7 @@ export default function FloatingTerminal({
 
   return (
     <div
-      className="fixed z-50"
+      className="fixed"
       style={{
         left: 0,
         top: 0,
@@ -238,8 +242,12 @@ export default function FloatingTerminal({
         transform: `translate(${left}px, ${top}px) scale(${view.zoom})`,
         transformOrigin: "top left",
         perspective: 1200,
+        zIndex: z,
       }}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onFocus?.();
+      }}
     >
       <div
         style={{

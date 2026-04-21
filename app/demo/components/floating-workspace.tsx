@@ -322,6 +322,8 @@ export default function FloatingWorkspace({
   onStartUbuntu,
   onZoomToFit,
   onResetContainer,
+  z,
+  onFocus,
 }: {
   view: View;
   workspace: Workspace | null;
@@ -331,6 +333,8 @@ export default function FloatingWorkspace({
   onStartUbuntu: () => void;
   onZoomToFit?: (rect: { x: number; y: number; w: number; h: number }) => void;
   onResetContainer: () => Promise<boolean>;
+  z: number;
+  onFocus?: () => void;
 }) {
   const [flipped, setFlipped] = useState(false);
   // 初期位置は window 参照が必要だが、SSR 時は window が無いので lazy initializer の中で分岐。
@@ -609,7 +613,7 @@ export default function FloatingWorkspace({
 
   return (
     <div
-      className="fixed z-40"
+      className="fixed"
       style={{
         left: 0,
         top: 0,
@@ -618,8 +622,12 @@ export default function FloatingWorkspace({
         transform: `translate(${left}px, ${top}px) scale(${view.zoom})`,
         transformOrigin: "top left",
         perspective: 1200,
+        zIndex: z,
       }}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onFocus?.();
+      }}
     >
       <div
         style={{

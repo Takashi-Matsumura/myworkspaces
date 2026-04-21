@@ -2,10 +2,25 @@
 
 import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { ZoomIn, ZoomOut, Layers, PenTool } from "lucide-react";
+import {
+  ZoomIn,
+  ZoomOut,
+  Layers,
+  PenTool,
+  Folder,
+  Play,
+  ShieldCheck,
+  TerminalSquare,
+} from "lucide-react";
 import type { View, CanvasActions } from "./demo/components/whiteboard-canvas";
 import type { Workspace } from "./demo/components/floating-workspace";
 import type { TerminalSession } from "./demo/components/floating-terminal";
+
+type PanelId = "workspace" | "coding" | "business" | "ubuntu";
+
+// デフォルトの重なり順。後ろほど手前に来る (末尾が最前面)。
+// 起動直後はターミナルをワークスペースより上に置く。
+const INITIAL_PANEL_ORDER: PanelId[] = ["workspace", "ubuntu", "business", "coding"];
 
 const WhiteboardCanvas = dynamic(
   () => import("./demo/components/whiteboard-canvas"),
@@ -30,6 +45,18 @@ export default function Home() {
   const [drawOver, setDrawOver] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   const [containerBusy, setContainerBusy] = useState(false);
+  const [panelOrder, setPanelOrder] = useState<PanelId[]>(INITIAL_PANEL_ORDER);
+
+  const bringToFront = useCallback((id: PanelId) => {
+    setPanelOrder((order) => {
+      if (order[order.length - 1] === id) return order;
+      return [...order.filter((p) => p !== id), id];
+    });
+  }, []);
+
+  // z-index は 40 起点、末尾ほど手前。footer (z-[60]) より下に収める。
+  const zFor = (id: PanelId): number => 40 + panelOrder.indexOf(id);
+  const frontPanel = panelOrder[panelOrder.length - 1];
 
   // ワークスペース切替時は cwd を持つセッションが意味を失うので、
   // setState をまとめて呼ぶラッパーで一緒にクリアする。effect 内の setState は使わない。
@@ -47,14 +74,17 @@ export default function Home() {
   const startCoding = () => {
     if (!workspace) return;
     setCodingSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
+    bringToFront("coding");
   };
   const startBusiness = () => {
     if (!workspace) return;
     setBusinessSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
+    bringToFront("business");
   };
   const startUbuntu = () => {
     if (!workspace) return;
     setUbuntuSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
+    bringToFront("ubuntu");
   };
 
   // 設定パネルのコンテナタブから呼ばれる。confirm は呼び出し側で出すため、ここでは出さない。
@@ -97,6 +127,8 @@ export default function Home() {
         onStartUbuntu={startUbuntu}
         onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
         onResetContainer={resetContainer}
+        z={zFor("workspace")}
+        onFocus={() => bringToFront("workspace")}
       />
       {codingSession && (
         <FloatingTerminal
@@ -106,6 +138,8 @@ export default function Home() {
           onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
           variant="coding"
           slot="left"
+          z={zFor("coding")}
+          onFocus={() => bringToFront("coding")}
         />
       )}
       {businessSession && (
@@ -116,6 +150,8 @@ export default function Home() {
           onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
           variant="business"
           slot="right"
+          z={zFor("business")}
+          onFocus={() => bringToFront("business")}
         />
       )}
       {ubuntuSession && (
@@ -126,11 +162,54 @@ export default function Home() {
           onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
           variant="ubuntu"
           slot="center"
+          z={zFor("ubuntu")}
+          onFocus={() => bringToFront("ubuntu")}
         />
       )}
       <footer className="fixed right-0 bottom-0 left-0 z-[60] flex h-8 items-center justify-center gap-1 border-t border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="absolute inset-y-0 left-2 flex items-center gap-2">
           <span className="font-mono text-[10px] text-slate-500">sub: demo</span>
+          <PanelSwitcherButton
+            active={frontPanel === "workspace"}
+            onClick={() => bringToFront("workspace")}
+            label="Workspace"
+            title="ワークスペースパネルを最前面に"
+          >
+            <Folder className="h-3 w-3" />
+          </PanelSwitcherButton>
+          {codingSession && (
+            <PanelSwitcherButton
+              active={frontPanel === "coding"}
+              onClick={() => bringToFront("coding")}
+              label="Coding"
+              title="Coding を最前面に"
+              accent="#15151c"
+            >
+              <Play className="h-3 w-3" />
+            </PanelSwitcherButton>
+          )}
+          {businessSession && (
+            <PanelSwitcherButton
+              active={frontPanel === "business"}
+              onClick={() => bringToFront("business")}
+              label="Business"
+              title="Business を最前面に"
+              accent="#217346"
+            >
+              <ShieldCheck className="h-3 w-3" />
+            </PanelSwitcherButton>
+          )}
+          {ubuntuSession && (
+            <PanelSwitcherButton
+              active={frontPanel === "ubuntu"}
+              onClick={() => bringToFront("ubuntu")}
+              label="Bash"
+              title="Bash を最前面に"
+              accent="#4f46e5"
+            >
+              <TerminalSquare className="h-3 w-3" />
+            </PanelSwitcherButton>
+          )}
         </div>
         <button
           type="button"
@@ -182,5 +261,41 @@ export default function Home() {
         </button>
       </footer>
     </main>
+  );
+}
+
+function PanelSwitcherButton({
+  active,
+  onClick,
+  label,
+  title,
+  accent,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  title: string;
+  accent?: string;
+  children: React.ReactNode;
+}) {
+  const style = active && accent ? { backgroundColor: accent, borderColor: accent } : undefined;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+        active
+          ? accent
+            ? "text-white shadow-sm"
+            : "border-slate-600 bg-slate-600 text-white shadow-sm"
+          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+      }`}
+      style={style}
+    >
+      {children}
+      {label}
+    </button>
   );
 }
