@@ -9,13 +9,12 @@ import {
 } from "react";
 import {
   RefreshCw,
-  Play,
+  CodeXml,
   Folder,
   FileText,
   ChevronRight,
   ChevronDown,
   Maximize2,
-  ShieldCheck,
   TerminalSquare,
   List,
   X,
@@ -26,6 +25,12 @@ import {
 } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
 import SettingsPanel from "./settings-panel";
+
+type ContainerInfo = {
+  exists: boolean;
+  running: boolean;
+  id?: string;
+};
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -359,6 +364,26 @@ export default function FloatingWorkspace({
   const [registered, setRegistered] = useState<WorkspaceListEntry[]>([]);
   const [listOpen, setListOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [containerInfo, setContainerInfo] = useState<ContainerInfo | null>(null);
+
+  const refetchContainer = useCallback(async () => {
+    try {
+      const res = await fetch("/api/container", { cache: "no-store" });
+      if (res.ok) setContainerInfo((await res.json()) as ContainerInfo);
+    } catch {
+      // noop: ヘッダバッジが出ないだけなので握り潰す
+    }
+  }, []);
+
+  // 初回 + コンテナが存在しない間は数秒おきにポーリング (ターミナル起動やリセット後に自動で反映される)。
+  // 一度 id を掴んだら止まる。
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void refetchContainer(); }, [refetchContainer]);
+  useEffect(() => {
+    if (containerInfo?.id) return;
+    const t = setInterval(() => void refetchContainer(), 3000);
+    return () => clearInterval(t);
+  }, [containerInfo?.id, refetchContainer]);
 
   useEffect(() => {
     if (!notice) return;
@@ -663,6 +688,14 @@ export default function FloatingWorkspace({
             <Maximize2 className="hidden h-2.5 w-2.5 stroke-[3] text-black/60 group-hover:block" style={{ margin: "0.5px" }} />
           </button>
           <span className="font-mono font-medium text-slate-700">workspace</span>
+          {containerInfo?.id && (
+            <span
+              className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500"
+              title={`Docker container ID (${containerInfo.running ? "running" : "stopped"})`}
+            >
+              {containerInfo.id}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className="truncate font-mono text-[10px] text-slate-400">
@@ -721,7 +754,7 @@ export default function FloatingWorkspace({
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#15151c] bg-[#15151c] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#2a2a35] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
             title={workspace ? `Coding を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
-            <Play className="h-3.5 w-3.5 shrink-0" />
+            <CodeXml className="h-3.5 w-3.5 shrink-0" />
             Coding
           </button>
           <button
@@ -731,7 +764,7 @@ export default function FloatingWorkspace({
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#217346] bg-[#217346] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#1a5c38] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
             title={workspace ? `Business を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+            <CodeXml className="h-3.5 w-3.5 shrink-0" />
             Business
           </button>
           <button

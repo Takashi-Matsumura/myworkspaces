@@ -31,6 +31,7 @@ export type Cmd = "opencode" | "shell";
 export type ContainerStatus = {
   exists: boolean;
   running: boolean;
+  id?: string; // short (12 chars) Docker container ID
 };
 
 const docker = new Docker();
@@ -191,7 +192,11 @@ export async function getContainerStatus(sub: string): Promise<ContainerStatus> 
   const name = containerName(sub);
   try {
     const info = await docker.getContainer(name).inspect();
-    return { exists: true, running: Boolean(info.State?.Running) };
+    return {
+      exists: true,
+      running: Boolean(info.State?.Running),
+      id: typeof info.Id === "string" ? info.Id.slice(0, 12) : undefined,
+    };
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
     if (status === 404) return { exists: false, running: false };

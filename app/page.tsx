@@ -8,8 +8,7 @@ import {
   Layers,
   PenTool,
   Folder,
-  Play,
-  ShieldCheck,
+  CodeXml,
   TerminalSquare,
 } from "lucide-react";
 import type { View, CanvasActions } from "./demo/components/whiteboard-canvas";
@@ -185,7 +184,7 @@ export default function Home() {
               title="Coding を最前面に"
               accent="#15151c"
             >
-              <Play className="h-3 w-3" />
+              <CodeXml className="h-3 w-3" />
             </PanelSwitcherButton>
           )}
           {businessSession && (
@@ -196,7 +195,7 @@ export default function Home() {
               title="Business を最前面に"
               accent="#217346"
             >
-              <ShieldCheck className="h-3 w-3" />
+              <CodeXml className="h-3 w-3" />
             </PanelSwitcherButton>
           )}
           {ubuntuSession && (
