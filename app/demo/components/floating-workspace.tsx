@@ -21,8 +21,11 @@ import {
   X,
   Plus,
   Upload,
+  Settings,
+  ArrowLeft,
 } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
+import SettingsPanel from "./settings-panel";
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -318,6 +321,7 @@ export default function FloatingWorkspace({
   onStartBusiness,
   onStartUbuntu,
   onZoomToFit,
+  onResetContainer,
 }: {
   view: View;
   workspace: Workspace | null;
@@ -326,7 +330,9 @@ export default function FloatingWorkspace({
   onStartBusiness: () => void;
   onStartUbuntu: () => void;
   onZoomToFit?: (rect: { x: number; y: number; w: number; h: number }) => void;
+  onResetContainer: () => Promise<boolean>;
 }) {
+  const [flipped, setFlipped] = useState(false);
   // 初期位置は window 参照が必要だが、SSR 時は window が無いので lazy initializer の中で分岐。
   const [scenePos, setScenePos] = useState<ScenePos>(() => {
     if (typeof window === "undefined") return { x: 60, y: 60 };
@@ -603,7 +609,7 @@ export default function FloatingWorkspace({
 
   return (
     <div
-      className="fixed z-40 flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl shadow-slate-900/20"
+      className="fixed z-40"
       style={{
         left: 0,
         top: 0,
@@ -611,9 +617,25 @@ export default function FloatingWorkspace({
         height: sceneSize.h,
         transform: `translate(${left}px, ${top}px) scale(${view.zoom})`,
         transformOrigin: "top left",
+        perspective: 1200,
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          transformStyle: "preserve-3d",
+          transition: "transform 0.6s ease-in-out",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        }}
+      >
+        {/* Front */}
+        <div
+          className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl shadow-slate-900/20"
+          style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden" }}
+        >
       <div
         className="flex h-9 cursor-grab items-center justify-between gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 text-xs text-slate-600 active:cursor-grabbing select-none"
         onPointerDown={onHeaderPointerDown}
@@ -634,9 +656,22 @@ export default function FloatingWorkspace({
           </button>
           <span className="font-mono font-medium text-slate-700">workspace</span>
         </div>
-        <span className="truncate font-mono text-[10px] text-slate-400">
-          {workspace?.cwd ?? "(no workspace open)"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="truncate font-mono text-[10px] text-slate-400">
+            {workspace?.cwd ?? "(no workspace open)"}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFlipped(true);
+            }}
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+            title="設定"
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="relative flex flex-nowrap items-center gap-1.5 border-b border-slate-200 bg-white px-2 py-1">
@@ -812,6 +847,53 @@ export default function FloatingWorkspace({
           {!fileLoading && !fileContent && (
             <div className="px-3 py-2 font-mono text-xs text-slate-400">ファイルを選択</div>
           )}
+          <div
+            className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
+            onPointerDown={onResizePointerDown}
+            onPointerMove={onResizePointerMove}
+            onPointerUp={onResizePointerUp}
+            style={{ background: "linear-gradient(135deg, transparent 50%, rgba(100,116,139,0.4) 50%)" }}
+          />
+        </div>
+      </div>
+        </div>
+
+        {/* Back (settings) */}
+        <div
+          className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl shadow-slate-900/20"
+          style={{
+            position: "absolute",
+            inset: 0,
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+        >
+          <div
+            className="flex h-9 cursor-grab items-center justify-between gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 text-xs text-slate-600 active:cursor-grabbing select-none"
+            onPointerDown={onHeaderPointerDown}
+            onPointerMove={onHeaderPointerMove}
+            onPointerUp={onHeaderPointerUp}
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFlipped(false);
+                }}
+                className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                title="ワークスペースに戻る"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </button>
+              <Settings className="h-3.5 w-3.5 text-slate-500" />
+              <span className="font-mono font-medium text-slate-700">settings</span>
+            </div>
+            <span className="truncate font-mono text-[10px] text-slate-400">
+              sub: demo
+            </span>
+          </div>
+          <SettingsPanel onResetContainer={onResetContainer} />
           <div
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
             onPointerDown={onResizePointerDown}

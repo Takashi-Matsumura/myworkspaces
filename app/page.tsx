@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { ZoomIn, ZoomOut, Layers, PenTool, RefreshCw } from "lucide-react";
+import { ZoomIn, ZoomOut, Layers, PenTool } from "lucide-react";
 import type { View, CanvasActions } from "./demo/components/whiteboard-canvas";
 import type { Workspace } from "./demo/components/floating-workspace";
 import type { TerminalSession } from "./demo/components/floating-terminal";
@@ -57,10 +57,12 @@ export default function Home() {
     setUbuntuSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
   };
 
-  const resetContainer = async () => {
-    if (containerBusy) return;
+  // 設定パネルのコンテナタブから呼ばれる。confirm は呼び出し側で出すため、ここでは出さない。
+  // 成功時 true / 失敗・中断時 false を返す。
+  const resetContainer = useCallback(async (): Promise<boolean> => {
+    if (containerBusy) return false;
     if (!confirm("コンテナを作り直します。/root 以外にインストール/作成したものは失われます。続行しますか？")) {
-      return;
+      return false;
     }
     setContainerBusy(true);
     try {
@@ -69,12 +71,14 @@ export default function Home() {
       setUbuntuSession(null);
       const res = await fetch("/api/container", { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return true;
     } catch (err) {
       alert(`リセットに失敗しました: ${(err as Error).message}`);
+      return false;
     } finally {
       setContainerBusy(false);
     }
-  };
+  }, [containerBusy]);
 
   return (
     <main className="fixed inset-0 overflow-hidden">
@@ -92,6 +96,7 @@ export default function Home() {
         onStartBusiness={startBusiness}
         onStartUbuntu={startUbuntu}
         onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
+        onResetContainer={resetContainer}
       />
       {codingSession && (
         <FloatingTerminal
@@ -126,15 +131,6 @@ export default function Home() {
       <footer className="fixed right-0 bottom-0 left-0 z-[60] flex h-8 items-center justify-center gap-1 border-t border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="absolute inset-y-0 left-2 flex items-center gap-2">
           <span className="font-mono text-[10px] text-slate-500">sub: demo</span>
-          <button
-            type="button"
-            onClick={resetContainer}
-            disabled={containerBusy}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-            title="コンテナを作り直す (/root 以外はリセット)"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${containerBusy ? "animate-spin" : ""}`} />
-          </button>
         </div>
         <button
           type="button"
