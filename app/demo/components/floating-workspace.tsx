@@ -819,7 +819,7 @@ export default function FloatingWorkspace({
             title={workspace ? `Coding パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <CodeXml className="h-3.5 w-3.5 shrink-0" />
-            Coding
+            Code
           </button>
           <button
             type="button"
@@ -829,7 +829,7 @@ export default function FloatingWorkspace({
             title={workspace ? `Business パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <CodeXml className="h-3.5 w-3.5 shrink-0" />
-            Business
+            Biz
           </button>
           <button
             type="button"
@@ -935,27 +935,29 @@ export default function FloatingWorkspace({
           onPointerMove={onSplitPointerMove}
           onPointerUp={onSplitPointerUp}
         />
-        <div className="relative min-w-0 flex-1 overflow-auto bg-white">
-          {fileLoading && (
-            <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>reading…</div>
-          )}
-          {!fileLoading && fileContent && (
-            <>
-              <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] text-slate-500">
-                {fileContent.path.split("/").pop()}
-                {fileContent.truncated && <span className="ml-2 text-amber-600">(truncated to 512KB)</span>}
-              </div>
-              <pre
-                className="px-3 py-2 font-mono whitespace-pre-wrap break-words text-slate-800"
-                style={{ fontSize }}
-              >
-                {fileContent.content}
-              </pre>
-            </>
-          )}
-          {!fileLoading && !fileContent && (
-            <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>ファイル表示（簡易）</div>
-          )}
+        <div className="relative min-w-0 flex-1 overflow-hidden bg-white">
+          <div className="h-full overflow-auto">
+            {fileLoading && (
+              <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>reading…</div>
+            )}
+            {!fileLoading && fileContent && (
+              <>
+                <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] text-slate-500">
+                  {fileContent.path.split("/").pop()}
+                  {fileContent.truncated && <span className="ml-2 text-amber-600">(truncated to 512KB)</span>}
+                </div>
+                <pre
+                  className="px-3 py-2 font-mono whitespace-pre-wrap break-words text-slate-800"
+                  style={{ fontSize }}
+                >
+                  {fileContent.content}
+                </pre>
+              </>
+            )}
+            {!fileLoading && !fileContent && (
+              <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>ファイル表示（簡易）</div>
+            )}
+          </div>
           <div
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
             onPointerDown={onResizePointerDown}
