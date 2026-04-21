@@ -2,6 +2,7 @@ import { Writable } from "node:stream";
 import { pack as tarPack } from "tar-stream";
 import { ensureContainer } from "./docker-session";
 import { workspaceCwd } from "./user-store";
+import { buildOpencodeJson, getSettings } from "./settings";
 
 const WORKSPACE_ROOT = "/root/workspaces";
 const TEMPLATE_DIR = "/opt/myworkspaces/templates";
@@ -94,21 +95,45 @@ async function execCollect(
   };
 }
 
+// 1 ファイルの中身 (string / Buffer) をコンテナ内パスに書き出すヘルパ。
+// putArchive は「展開先ディレクトリ」を指すので、相対パスに dirname/basename を畳み込んで渡す。
+async function writeFileInContainer(
+  sub: string,
+  absolutePath: string,
+  content: Buffer,
+): Promise<void> {
+  const lastSlash = absolutePath.lastIndexOf("/");
+  if (lastSlash <= 0) {
+    throw new WorkspaceError("invalid absolute path", 400);
+  }
+  const targetDir = absolutePath.slice(0, lastSlash);
+  const basename = absolutePath.slice(lastSlash + 1);
+  const container = await ensureContainer(sub);
+  const tar = tarPack();
+  tar.entry({ name: basename, size: content.byteLength, mode: 0o644 }, content);
+  tar.finalize();
+  const chunks: Buffer[] = [];
+  for await (const chunk of tar as unknown as AsyncIterable<Buffer>) {
+    chunks.push(chunk);
+  }
+  await container.putArchive(Buffer.concat(chunks), { path: targetDir });
+}
+
 // ワークスペース作成: コンテナ内 /root/workspaces/{id}/ を mkdir し、
-// テンプレート (.opencode/tools + vision-rules.md + business-rules.md + opencode.json)
-// をコピーする。cp -n で既存は上書きしない。
+// テンプレート (.opencode/tools + vision-rules.md + business-rules.md) をコピーし、
+// opencode.json は ユーザー設定から生成して putArchive で書き込む。
 export async function createWorkspaceDirectory(
   sub: string,
   id: string,
 ): Promise<void> {
-  const cwd = shellQuote(workspaceCwd(id));
+  const cwdPath = workspaceCwd(id);
+  const cwd = shellQuote(cwdPath);
   const script = [
     `mkdir -p ${cwd}/.opencode/tools`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/describe_image.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_excel.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/vision-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/business-rules.md ${cwd}/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/opencode.json ${cwd}/ 2>/dev/null || true`,
   ].join(" && ");
 
   const res = await execCollect(sub, ["/bin/bash", "-c", script]);
@@ -117,6 +142,21 @@ export async function createWorkspaceDirectory(
       `failed to initialize workspace: ${res.stderr.toString("utf-8")}`,
       500,
     );
+  }
+
+  // opencode.json は設定から生成。設定読み込みに失敗してもワークスペース自体は
+  // 成立させたいのでフォールバックとしてテンプレートを cp する。
+  try {
+    const settings = await getSettings(sub);
+    const json = buildOpencodeJson(settings);
+    await writeFileInContainer(sub, `${cwdPath}/opencode.json`, Buffer.from(json, "utf-8"));
+  } catch (err) {
+    console.warn("[workspace] buildOpencodeJson failed, falling back to template", err);
+    await execCollect(sub, [
+      "/bin/bash",
+      "-c",
+      `cp -n ${TEMPLATE_DIR}/opencode.json ${cwd}/ 2>/dev/null || true`,
+    ]);
   }
 }
 

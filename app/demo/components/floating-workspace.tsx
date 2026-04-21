@@ -9,20 +9,28 @@ import {
 } from "react";
 import {
   RefreshCw,
-  Play,
+  CodeXml,
   Folder,
   FileText,
   ChevronRight,
   ChevronDown,
   Maximize2,
-  ShieldCheck,
   TerminalSquare,
   List,
   X,
   Plus,
   Upload,
+  Settings,
+  ArrowLeft,
 } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
+import SettingsPanel from "./settings-panel";
+
+type ContainerInfo = {
+  exists: boolean;
+  running: boolean;
+  id?: string;
+};
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -318,6 +326,9 @@ export default function FloatingWorkspace({
   onStartBusiness,
   onStartUbuntu,
   onZoomToFit,
+  onResetContainer,
+  z,
+  onFocus,
 }: {
   view: View;
   workspace: Workspace | null;
@@ -326,7 +337,11 @@ export default function FloatingWorkspace({
   onStartBusiness: () => void;
   onStartUbuntu: () => void;
   onZoomToFit?: (rect: { x: number; y: number; w: number; h: number }) => void;
+  onResetContainer: () => Promise<boolean>;
+  z: number;
+  onFocus?: () => void;
 }) {
+  const [flipped, setFlipped] = useState(false);
   // 初期位置は window 参照が必要だが、SSR 時は window が無いので lazy initializer の中で分岐。
   const [scenePos, setScenePos] = useState<ScenePos>(() => {
     if (typeof window === "undefined") return { x: 60, y: 60 };
@@ -349,6 +364,26 @@ export default function FloatingWorkspace({
   const [registered, setRegistered] = useState<WorkspaceListEntry[]>([]);
   const [listOpen, setListOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [containerInfo, setContainerInfo] = useState<ContainerInfo | null>(null);
+
+  const refetchContainer = useCallback(async () => {
+    try {
+      const res = await fetch("/api/container", { cache: "no-store" });
+      if (res.ok) setContainerInfo((await res.json()) as ContainerInfo);
+    } catch {
+      // noop: ヘッダバッジが出ないだけなので握り潰す
+    }
+  }, []);
+
+  // 初回 + コンテナが存在しない間は数秒おきにポーリング (ターミナル起動やリセット後に自動で反映される)。
+  // 一度 id を掴んだら止まる。
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void refetchContainer(); }, [refetchContainer]);
+  useEffect(() => {
+    if (containerInfo?.id) return;
+    const t = setInterval(() => void refetchContainer(), 3000);
+    return () => clearInterval(t);
+  }, [containerInfo?.id, refetchContainer]);
 
   useEffect(() => {
     if (!notice) return;
@@ -603,7 +638,7 @@ export default function FloatingWorkspace({
 
   return (
     <div
-      className="fixed z-40 flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl shadow-slate-900/20"
+      className="fixed"
       style={{
         left: 0,
         top: 0,
@@ -611,9 +646,29 @@ export default function FloatingWorkspace({
         height: sceneSize.h,
         transform: `translate(${left}px, ${top}px) scale(${view.zoom})`,
         transformOrigin: "top left",
+        perspective: 1200,
+        zIndex: z,
       }}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onFocus?.();
+      }}
     >
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          transformStyle: "preserve-3d",
+          transition: "transform 0.6s ease-in-out",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        }}
+      >
+        {/* Front */}
+        <div
+          className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl shadow-slate-900/20"
+          style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden" }}
+        >
       <div
         className="flex h-9 cursor-grab items-center justify-between gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 text-xs text-slate-600 active:cursor-grabbing select-none"
         onPointerDown={onHeaderPointerDown}
@@ -633,10 +688,31 @@ export default function FloatingWorkspace({
             <Maximize2 className="hidden h-2.5 w-2.5 stroke-[3] text-black/60 group-hover:block" style={{ margin: "0.5px" }} />
           </button>
           <span className="font-mono font-medium text-slate-700">workspace</span>
+          {containerInfo?.id && (
+            <span
+              className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500"
+              title={`Docker container ID (${containerInfo.running ? "running" : "stopped"})`}
+            >
+              {containerInfo.id}
+            </span>
+          )}
         </div>
-        <span className="truncate font-mono text-[10px] text-slate-400">
-          {workspace?.cwd ?? "(no workspace open)"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="truncate font-mono text-[10px] text-slate-400">
+            {workspace?.cwd ?? "(no workspace open)"}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFlipped(true);
+            }}
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+            title="設定"
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="relative flex flex-nowrap items-center gap-1.5 border-b border-slate-200 bg-white px-2 py-1">
@@ -678,7 +754,7 @@ export default function FloatingWorkspace({
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#15151c] bg-[#15151c] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#2a2a35] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
             title={workspace ? `Coding を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
-            <Play className="h-3.5 w-3.5 shrink-0" />
+            <CodeXml className="h-3.5 w-3.5 shrink-0" />
             Coding
           </button>
           <button
@@ -688,7 +764,7 @@ export default function FloatingWorkspace({
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#217346] bg-[#217346] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#1a5c38] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
             title={workspace ? `Business を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+            <CodeXml className="h-3.5 w-3.5 shrink-0" />
             Business
           </button>
           <button
@@ -812,6 +888,53 @@ export default function FloatingWorkspace({
           {!fileLoading && !fileContent && (
             <div className="px-3 py-2 font-mono text-xs text-slate-400">ファイルを選択</div>
           )}
+          <div
+            className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
+            onPointerDown={onResizePointerDown}
+            onPointerMove={onResizePointerMove}
+            onPointerUp={onResizePointerUp}
+            style={{ background: "linear-gradient(135deg, transparent 50%, rgba(100,116,139,0.4) 50%)" }}
+          />
+        </div>
+      </div>
+        </div>
+
+        {/* Back (settings) */}
+        <div
+          className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl shadow-slate-900/20"
+          style={{
+            position: "absolute",
+            inset: 0,
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+        >
+          <div
+            className="flex h-9 cursor-grab items-center justify-between gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 text-xs text-slate-600 active:cursor-grabbing select-none"
+            onPointerDown={onHeaderPointerDown}
+            onPointerMove={onHeaderPointerMove}
+            onPointerUp={onHeaderPointerUp}
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFlipped(false);
+                }}
+                className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                title="ワークスペースに戻る"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </button>
+              <Settings className="h-3.5 w-3.5 text-slate-500" />
+              <span className="font-mono font-medium text-slate-700">settings</span>
+            </div>
+            <span className="truncate font-mono text-[10px] text-slate-400">
+              sub: demo
+            </span>
+          </div>
+          <SettingsPanel onResetContainer={onResetContainer} />
           <div
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
             onPointerDown={onResizePointerDown}
