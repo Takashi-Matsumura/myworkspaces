@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["vision-rules.md", "business-rules.md"],
+  "provider": {
+    "llamacpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama.cpp (local)",
+      "options": {
+        "baseURL": "http://host.docker.internal:8080/v1"
+      },
+      "models": {
+        "gemma-4-e4b-it-Q4_K_M.gguf": {
+          "name": "Gemma 4 E4B IT (Q4_K_M)",
+          "reasoning": true
+        }
+      }
+    }
+  },
+  "model": "llamacpp/gemma-4-e4b-it-Q4_K_M.gguf"
+}
