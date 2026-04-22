@@ -223,7 +223,7 @@ export default function WhiteboardCanvas({
       `}</style>
       {loaded ? (
         <Excalidraw
-          gridModeEnabled={drawOverMode}
+          gridModeEnabled={!drawOverMode}
           initialData={{
             elements: loaded.elements as never,
             appState: loaded.appState as never,
