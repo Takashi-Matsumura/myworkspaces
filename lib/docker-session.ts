@@ -14,6 +14,15 @@ const VOLUME_PREFIX = "myworkspaces-home-";
 const ROLE_LABEL_KEY = "io.myworkspaces.role";
 const SUB_LABEL_KEY = "io.myworkspaces.sub";
 
+// docker-compose のプロジェクトラベルを付与し、Docker Desktop 上で
+// postgres と同じ "myworkspaces" グループにまとめて表示する。
+// compose の管理下に入るわけではない (docker-compose.yml には書かれていない)。
+const COMPOSE_PROJECT = "myworkspaces";
+const COMPOSE_LABELS = {
+  "com.docker.compose.project": COMPOSE_PROJECT,
+  "com.docker.compose.project.config_files": "docker-compose.yml",
+} as const;
+
 // リソース上限。opencode + Node.js + llama クライアントを同居させるので
 // ptyserver-demo (512MB / 1 CPU) より大きめに取る。必要に応じて環境変数で調整。
 const MEM_BYTES = Number(process.env.CONTAINER_MEMORY_BYTES ?? 1024 * 1024 * 1024);
@@ -71,7 +80,7 @@ export async function ensureImageBuilt(): Promise<void> {
         "templates/opencode.json",
       ],
     },
-    { t: IMAGE, rm: true },
+    { t: IMAGE, rm: true, labels: { ...COMPOSE_LABELS } },
   );
   await new Promise<void>((resolve, reject) => {
     docker.modem.followProgress(
@@ -101,7 +110,12 @@ export async function ensureHomeVolume(sub: string): Promise<string> {
   }
   await docker.createVolume({
     Name: name,
-    Labels: { [ROLE_LABEL_KEY]: "home", [SUB_LABEL_KEY]: sub },
+    Labels: {
+      [ROLE_LABEL_KEY]: "home",
+      [SUB_LABEL_KEY]: sub,
+      ...COMPOSE_LABELS,
+      "com.docker.compose.volume": "home",
+    },
   });
   console.log(`[docker] home volume created: ${name}`);
   return name;
@@ -135,6 +149,9 @@ export async function ensureContainer(sub: string): Promise<Docker.Container> {
       Labels: {
         [ROLE_LABEL_KEY]: "session",
         [SUB_LABEL_KEY]: sub,
+        ...COMPOSE_LABELS,
+        // user 名のサービス名が一番わかりやすいので、ユーザごとに分ける
+        "com.docker.compose.service": `shell-${sanitizeSub(sub)}`,
       },
       HostConfig: {
         AutoRemove: false,
