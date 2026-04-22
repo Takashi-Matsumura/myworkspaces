@@ -189,6 +189,22 @@ export async function removeContainer(sub: string): Promise<boolean> {
   }
 }
 
+// ログアウト時に呼ぶ。コンテナは停止するだけで削除しない。
+// named volume (/root) と apt で入れたものはそのまま残り、次回ログイン時の start が速い。
+export async function stopContainer(sub: string): Promise<boolean> {
+  const name = containerName(sub);
+  try {
+    await docker.getContainer(name).stop({ t: 5 });
+    console.log(`[docker] stopped container: ${name}`);
+    return true;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 404) return false;
+    if (status === 304) return true; // 既に停止済み
+    throw err;
+  }
+}
+
 export async function getContainerStatus(sub: string): Promise<ContainerStatus> {
   const name = containerName(sub);
   try {
@@ -423,4 +439,11 @@ export async function attachSession(params: AttachParams): Promise<void> {
 export function shutdownAllSessions(): void {
   const all = Array.from(sessions.values());
   for (const s of all) destroySession(s);
+}
+
+// 特定ユーザのセッションだけを落とす。ログアウト時に使う。
+export function shutdownSessionsForSub(sub: string): void {
+  for (const s of Array.from(sessions.values())) {
+    if (s.sub === sub) destroySession(s);
+  }
 }
