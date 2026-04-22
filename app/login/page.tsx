@@ -23,6 +23,14 @@ export default function LoginPage() {
     if (busy) return;
     setError(null);
     setSubmitting(true);
+    // オーバーレイがブラウザに paint されるのを 1 フレーム待ってから fetch を開始する。
+    // これを挟まないと localhost の高速 API (〜100ms) では commit と
+    // router.replace が詰まり、スピナーがほぼ表示されないまま画面が切り替わる。
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    const startedAt = performance.now();
+    const MIN_MS = 400; // 速すぎる応答でもスピナーが一瞬見えるように下限を設ける
+
     try {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const res = await fetch(endpoint, {
@@ -30,14 +38,18 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < MIN_MS) {
+        await new Promise((r) => setTimeout(r, MIN_MS - elapsed));
+      }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? "リクエストに失敗しました");
         setSubmitting(false);
         return;
       }
-      // ここで submitting は解除せずに transitioning に移す。
-      // router.replace の完了 (= このページの unmount) までオーバーレイを出したまま。
+      // 成功時は submitting を解除せず transitioning に移す。
+      // router.replace の完了 (= このページの unmount) までオーバーレイを出し続ける。
       setTransitioning(true);
       router.replace("/");
       router.refresh();
@@ -153,12 +165,12 @@ export default function LoginPage() {
         <div
           aria-busy="true"
           aria-live="polite"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/10 backdrop-blur-[1px] cursor-wait"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/40 backdrop-blur-sm cursor-wait"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-3 rounded-lg bg-white/95 border border-neutral-200 shadow-md px-4 py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-neutral-700" />
-            <span className="text-sm text-neutral-700">
+          <div className="flex items-center gap-3 rounded-lg bg-white border border-neutral-200 shadow-lg px-5 py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-neutral-700" />
+            <span className="text-sm text-neutral-800">
               {submitting ? "認証しています..." : "ワークスペースを読み込んでいます..."}
             </span>
           </div>
