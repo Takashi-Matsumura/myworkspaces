@@ -8,7 +8,8 @@
 
 ## 特徴
 
-- 🔐 **アカウント／パスワード認証** — `/login` から登録・ログイン。ユーザーごとにコンテナ・ワークスペース・設定が完全分離
+- 🔐 **アカウント／パスワード認証** — `/login` から登録・ログイン。ユーザーごとにコンテナ・ワークスペース・設定・**ホワイトボード**が完全分離
+- 🖊️ **ホワイトボード自動保存** — Excalidraw の描画を 1.5 秒デバウンスで DB に保存、次回ログイン時に復元
 - 🖼️ **Excalidraw の無限ホワイトボード** を背景に、必要なパネルをフロートで開く UI
 - 🐳 **ユーザーごとに 1 つのコンテナ** (`myworkspaces-shell-{User.id}`) を永続起動し、`/root` は named volume で保持
 - 📂 **1 コンテナに複数ワークスペース** (`/root/workspaces/{id}`) — Workspace パネルから作成・切替・リネーム・削除（前回開いたものは起動時に自動で開く）
@@ -108,6 +109,8 @@ npm run dev
 | `POST` | `/api/user/workspaces` | `{label}` or `{id,label}` | 作成 / rename |
 | `PATCH` | `/api/user/workspaces` | `{id}` | lastOpenedAt 更新 |
 | `DELETE` | `/api/user/workspaces?id=` | — | 削除（実体 + メタ） |
+| `GET` | `/api/whiteboard` | — | ホワイトボード (Excalidraw elements + appState) |
+| `PUT` | `/api/whiteboard` | `{elements, appState}` | ホワイトボードを upsert |
 | `GET` | `/api/workspace?path=` | — | ディレクトリ 1 階層列挙 |
 | `GET` | `/api/workspace/file?path=` | — | ファイル内容（先頭 512KB） |
 | `POST` | `/api/workspace/upload` | multipart (`targetDir`, `relativePath`, `file`) | アップロード (tar → putArchive) |

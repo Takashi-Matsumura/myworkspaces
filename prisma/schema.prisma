@@ -20,6 +20,7 @@ model User {
   updatedAt    DateTime    @updatedAt
   workspaces   Workspace[]
   sessions     Session[]
+  whiteboard   Whiteboard?
 }
 
 model Session {
@@ -43,4 +44,15 @@ model Workspace {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ユーザごとの Excalidraw 白板。User と 1:1。
+// elements は Excalidraw の非削除要素配列をそのまま JSON で保存。
+// appState は scrollX / scrollY / zoom など復元に必要な最小部分のみ。
+model Whiteboard {
+  userId    String   @id
+  elements  Json
+  appState  Json
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

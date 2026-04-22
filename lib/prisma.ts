@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 // Prisma 7 はアダプタ必須。next dev の HMR で接続がリークしないよう
-// グローバルにキャッシュする。
+// グローバルにキャッシュする (開発時のみ)。
 declare global {
   var __prisma__: PrismaClient | undefined;
 }
