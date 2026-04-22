@@ -242,7 +242,7 @@ export default function Home() {
           className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
             drawOver ? "bg-sky-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
           }`}
-          title={drawOver ? "通常モードに戻す" : "パネルの上に描画 (Toolbar と Grid も表示)"}
+          title={drawOver ? "通常モードに戻す" : "パネルの上に描画 (Toolbar 表示 / Grid 非表示)"}
         >
           <Layers className="h-3.5 w-3.5" />
           {drawOver ? "Draw Over ON" : "Draw Over"}
