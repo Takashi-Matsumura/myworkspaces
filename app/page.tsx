@@ -6,7 +6,6 @@ import {
   ZoomIn,
   ZoomOut,
   Layers,
-  PenTool,
   Folder,
   CodeXml,
   TerminalSquare,
@@ -43,7 +42,8 @@ export default function Home() {
   const [businessSession, setBusinessSession] = useState<TerminalSession | null>(null);
   const [ubuntuSession, setUbuntuSession] = useState<TerminalSession | null>(null);
   const [drawOver, setDrawOver] = useState(false);
-  const [showToolbar, setShowToolbar] = useState(false);
+  // Toolbar は Draw Over の時だけ出す (独立トグルは廃止)
+  const showToolbar = drawOver;
   const [containerBusy, setContainerBusy] = useState(false);
   const [panelOrder, setPanelOrder] = useState<PanelId[]>(INITIAL_PANEL_ORDER);
 
@@ -242,22 +242,10 @@ export default function Home() {
           className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
             drawOver ? "bg-sky-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
           }`}
-          title={drawOver ? "通常モードに戻す" : "パネルの上に描画"}
+          title={drawOver ? "通常モードに戻す" : "パネルの上に描画 (Toolbar と Grid も表示)"}
         >
           <Layers className="h-3.5 w-3.5" />
           {drawOver ? "Draw Over ON" : "Draw Over"}
-        </button>
-        <span className="mx-1 h-4 w-px bg-slate-300" />
-        <button
-          type="button"
-          onClick={() => setShowToolbar((v) => !v)}
-          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
-            showToolbar ? "bg-sky-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
-          }`}
-          title={showToolbar ? "描画ツールを非表示" : "描画ツールを表示"}
-        >
-          <PenTool className="h-3.5 w-3.5" />
-          {showToolbar ? "Toolbar ON" : "Toolbar"}
         </button>
       </footer>
     </main>
