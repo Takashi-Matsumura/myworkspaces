@@ -14,6 +14,7 @@ import {
 import type { View, CanvasActions } from "./demo/components/whiteboard-canvas";
 import type { Workspace } from "./demo/components/floating-workspace";
 import type { TerminalSession } from "./demo/components/floating-terminal";
+import { AccountBadge } from "./demo/components/account-badge";
 
 type PanelId = "workspace" | "coding" | "business" | "ubuntu";
 
@@ -167,7 +168,7 @@ export default function Home() {
       )}
       <footer className="fixed right-0 bottom-0 left-0 z-[60] flex h-8 items-center justify-center gap-1 border-t border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="absolute inset-y-0 left-2 flex items-center gap-2">
-          <span className="font-mono text-[10px] text-slate-500">sub: demo</span>
+          <AccountBadge />
           <PanelSwitcherButton
             active={frontPanel === "workspace"}
             onClick={() => bringToFront("workspace")}

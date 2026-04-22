@@ -1,21 +1,52 @@
 import type { IncomingMessage } from "node:http";
+import { SESSION_COOKIE, parseCookie, resolveSessionCookie, type SessionUser } from "./auth";
 
-export type UserIdentity = { sub: string };
+export type UserIdentity = { sub: string; username: string };
 
-const DEMO_SUB = "demo";
-
-// 認証なしの簡易版。将来 OIDC / Cookie セッションに差し替えやすいよう、
-// sub の取得はここ 1 箇所に集約する。
-// 呼び出し側は Next.js の Request と Node の IncomingMessage の両方から
-// 使うので、引数を省略可能にしている。
-export function getSub(req?: Request | IncomingMessage): string {
-  // 将来 OIDC / Cookie セッションに差し替える箇所。現状は req を見ない。
-  void req;
-  return process.env.DEMO_SUB ?? DEMO_SUB;
+function cookieHeaderFrom(req: Request | IncomingMessage | undefined): string | null | undefined {
+  if (!req) return undefined;
+  if ("headers" in req) {
+    const h = (req as { headers: unknown }).headers;
+    if (h && typeof h === "object") {
+      if (typeof (h as Headers).get === "function") {
+        return (h as Headers).get("cookie");
+      }
+      const raw = (h as Record<string, string | string[] | undefined>).cookie;
+      if (Array.isArray(raw)) return raw.join("; ");
+      return raw ?? null;
+    }
+  }
+  return null;
 }
 
-export function getIdentity(req?: Request | IncomingMessage): UserIdentity {
-  return { sub: getSub(req) };
+async function resolve(req: Request | IncomingMessage | undefined): Promise<SessionUser | null> {
+  const header = cookieHeaderFrom(req);
+  const raw = parseCookie(header ?? "", SESSION_COOKIE);
+  return resolveSessionCookie(raw);
+}
+
+// 未認証なら null を返す。ルート側で 401 を返す責務。
+export async function getUser(req: Request | IncomingMessage | undefined): Promise<SessionUser | null> {
+  return resolve(req);
+}
+
+export async function getIdentity(req: Request | IncomingMessage | undefined): Promise<UserIdentity | null> {
+  const u = await resolve(req);
+  return u ? { sub: u.id, username: u.username } : null;
+}
+
+// 認証済み前提で sub を取り出す。未認証なら例外。API ルートは requireUser を使う。
+export async function requireUser(req: Request | IncomingMessage | undefined): Promise<SessionUser> {
+  const u = await resolve(req);
+  if (!u) throw new UnauthorizedError();
+  return u;
+}
+
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("unauthorized");
+    this.name = "UnauthorizedError";
+  }
 }
 
 export function sanitizeSub(sub: string): string {

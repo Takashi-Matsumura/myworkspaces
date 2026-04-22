@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSub } from "@/lib/user";
+import { getUser } from "@/lib/user";
 import { uploadFile, WorkspaceError } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB
 
 export async function POST(request: NextRequest) {
-  const sub = getSub(request);
+  const user = await getUser(request);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   let form: FormData;
   try {
     form = await request.formData();
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const buf = Buffer.from(await file.arrayBuffer());
-    await uploadFile(sub, targetDir, relativePath, buf);
+    await uploadFile(user.id, targetDir, relativePath, buf);
     return NextResponse.json({ ok: true, size: buf.byteLength });
   } catch (err) {
     if (err instanceof WorkspaceError) {
