@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, LogOut } from "lucide-react";
 
@@ -13,9 +14,11 @@ export function AccountBadge() {
   // transitioning: /login へ遷移中 (ページ unmount までロックを維持)
   const [loggingOut, setLoggingOut] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const busy = loggingOut || transitioning;
 
   useEffect(() => {
+    setMounted(true);
     let cancel = false;
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -50,6 +53,26 @@ export function AccountBadge() {
     router.refresh();
   }
 
+  // 祖先の footer に backdrop-blur が効いていると、fixed 子孫が
+  // ビューポートでなく footer を基準に positioning されてしまう (CSS 仕様)。
+  // document.body 直下に portal して回避。
+  const overlay = busy ? (
+    <div
+      aria-busy="true"
+      aria-live="polite"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-neutral-900/40 backdrop-blur-sm cursor-wait"
+    >
+      <div className="flex items-center gap-3 rounded-lg bg-white border border-neutral-200 shadow-lg px-5 py-4">
+        <Loader2 className="h-5 w-5 animate-spin text-neutral-700" />
+        <span className="text-sm text-neutral-800">
+          {loggingOut
+            ? "ログアウトしています..."
+            : "ログイン画面に戻っています..."}
+        </span>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <>
       <span className="flex items-center gap-1 font-mono text-[10px] text-slate-500">
@@ -64,23 +87,7 @@ export function AccountBadge() {
           <LogOut className="h-3 w-3" />
         </button>
       </span>
-
-      {busy ? (
-        <div
-          aria-busy="true"
-          aria-live="polite"
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/40 backdrop-blur-sm cursor-wait"
-        >
-          <div className="flex items-center gap-3 rounded-lg bg-white border border-neutral-200 shadow-lg px-5 py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-neutral-700" />
-            <span className="text-sm text-neutral-800">
-              {loggingOut
-                ? "ログアウトしています..."
-                : "ログイン画面に戻っています..."}
-            </span>
-          </div>
-        </div>
-      ) : null}
+      {mounted && overlay ? createPortal(overlay, document.body) : null}
     </>
   );
 }
