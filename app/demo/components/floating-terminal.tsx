@@ -31,7 +31,7 @@ const VARIANT_STYLES: Record<TerminalVariant, VariantStyle> = {
   coding: {
     label: "opencode — coding",
     headerBg: "bg-[#15151c]",
-    headerText: "text-white/70",
+    headerText: "text-white",
     headerBorder: "border-white/10 border-t-2 border-t-emerald-500",
     panelBorder: "border border-white/10 shadow-black/50",
     panelBg: "#0b0b0f",
@@ -49,7 +49,7 @@ const VARIANT_STYLES: Record<TerminalVariant, VariantStyle> = {
   ubuntu: {
     label: "ubuntu — bash",
     headerBg: "bg-[#1e1b4b]",
-    headerText: "text-white/70",
+    headerText: "text-white",
     headerBorder: "border-white/10 border-t-2 border-t-indigo-400",
     panelBorder: "border border-white/10 shadow-black/50",
     panelBg: "#0b0b0f",
@@ -175,7 +175,7 @@ export default function FloatingTerminal({
           type="button"
           onClick={onStop}
           className="group h-3 w-3 rounded-full bg-[#ff5f57] hover:brightness-110"
-          title="ターミナルを閉じる"
+          title="パネルを閉じる"
         >
           <X className="hidden h-3 w-3 stroke-[3] text-black/60 group-hover:block" />
         </button>
@@ -203,16 +203,16 @@ export default function FloatingTerminal({
         <button
           type="button"
           onClick={() => changeFontSize(-1)}
-          className="rounded px-1 text-[10px] opacity-60 hover:bg-white/10 hover:opacity-100"
+          className="rounded px-1 text-[10px] text-white hover:bg-white/10"
           title="文字サイズを下げる"
         >
           A-
         </button>
-        <span className="font-mono text-[10px] opacity-60 min-w-[1.5rem] text-center">{fontSize}</span>
+        <span className="font-mono text-[10px] text-white min-w-[1.5rem] text-center">{fontSize}</span>
         <button
           type="button"
           onClick={() => changeFontSize(1)}
-          className="rounded px-1 text-[10px] opacity-60 hover:bg-white/10 hover:opacity-100"
+          className="rounded px-1 text-[10px] text-white hover:bg-white/10"
           title="文字サイズを上げる"
         >
           A+
@@ -221,7 +221,7 @@ export default function FloatingTerminal({
           <button
             type="button"
             onClick={handleFlip}
-            className="ml-1 rounded p-0.5 opacity-60 hover:bg-white/10 hover:opacity-100"
+            className="ml-1 rounded p-0.5 text-white hover:bg-white/10"
             title={flipped ? "表面に戻す" : "シェルを開く"}
           >
             <ArrowUpDown className="h-3.5 w-3.5 rotate-90" />
@@ -284,7 +284,7 @@ export default function FloatingTerminal({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
-                  Workspace を選んでからボタンで起動してください
+                  Workspace パネルからワークスペースを選択して起動してください
                 </div>
               )}
               <div

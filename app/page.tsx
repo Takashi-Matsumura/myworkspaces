@@ -172,7 +172,7 @@ export default function Home() {
             active={frontPanel === "workspace"}
             onClick={() => bringToFront("workspace")}
             label="Workspace"
-            title="ワークスペースパネルを最前面に"
+            title="Workspace パネルを最前面に"
           >
             <Folder className="h-3 w-3" />
           </PanelSwitcherButton>
@@ -181,7 +181,7 @@ export default function Home() {
               active={frontPanel === "coding"}
               onClick={() => bringToFront("coding")}
               label="Coding"
-              title="Coding を最前面に"
+              title="Coding パネルを最前面に"
               accent="#15151c"
             >
               <CodeXml className="h-3 w-3" />
@@ -192,7 +192,7 @@ export default function Home() {
               active={frontPanel === "business"}
               onClick={() => bringToFront("business")}
               label="Business"
-              title="Business を最前面に"
+              title="Business パネルを最前面に"
               accent="#217346"
             >
               <CodeXml className="h-3 w-3" />
@@ -203,7 +203,7 @@ export default function Home() {
               active={frontPanel === "ubuntu"}
               onClick={() => bringToFront("ubuntu")}
               label="Bash"
-              title="Bash を最前面に"
+              title="Bash パネルを最前面に"
               accent="#4f46e5"
             >
               <TerminalSquare className="h-3 w-3" />

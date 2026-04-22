@@ -191,6 +191,7 @@ function TreeRow({
   childEntries,
   selectedFile,
   loadingPaths,
+  fontSize,
   onToggleDir,
   onSelectFile,
 }: {
@@ -201,6 +202,7 @@ function TreeRow({
   childEntries: Map<string, Entry[]>;
   selectedFile: string | null;
   loadingPaths: Set<string>;
+  fontSize: number;
   onToggleDir: (p: string) => void;
   onSelectFile: (p: string) => void;
 }) {
@@ -215,10 +217,10 @@ function TreeRow({
       <button
         type="button"
         onClick={() => (isDir ? onToggleDir(path) : onSelectFile(path))}
-        className={`flex w-full items-center gap-1 px-2 py-0.5 text-left font-mono text-xs transition-colors ${
+        className={`flex w-full items-center gap-1 px-2 py-0.5 text-left font-mono transition-colors ${
           isSelected ? "bg-sky-100 text-sky-900" : "text-slate-700 hover:bg-slate-100"
         }`}
-        style={{ paddingLeft: 8 + depth * 12 }}
+        style={{ paddingLeft: 8 + depth * 12, fontSize }}
         title={path}
       >
         <span className="w-3 shrink-0 text-slate-400">
@@ -240,12 +242,16 @@ function TreeRow({
               childEntries={childEntries}
               selectedFile={selectedFile}
               loadingPaths={loadingPaths}
+              fontSize={fontSize}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
             />
           ))}
           {children.length === 0 && (
-            <div className="px-2 py-0.5 font-mono text-xs text-slate-400" style={{ paddingLeft: 8 + (depth + 1) * 12 }}>
+            <div
+              className="px-2 py-0.5 font-mono text-slate-400"
+              style={{ paddingLeft: 8 + (depth + 1) * 12, fontSize }}
+            >
               (empty)
             </div>
           )}
@@ -261,6 +267,7 @@ function TreeRootRow({
   childEntries,
   selectedFile,
   loadingPaths,
+  fontSize,
   onToggleDir,
   onSelectFile,
 }: {
@@ -269,6 +276,7 @@ function TreeRootRow({
   childEntries: Map<string, Entry[]>;
   selectedFile: string | null;
   loadingPaths: Set<string>;
+  fontSize: number;
   onToggleDir: (p: string) => void;
   onSelectFile: (p: string) => void;
 }) {
@@ -281,7 +289,8 @@ function TreeRootRow({
       <button
         type="button"
         onClick={() => onToggleDir(rootPath)}
-        className="flex w-full items-center gap-1 px-2 py-0.5 text-left font-mono text-xs text-slate-700 hover:bg-slate-100"
+        className="flex w-full items-center gap-1 px-2 py-0.5 text-left font-mono text-slate-700 hover:bg-slate-100"
+        style={{ fontSize }}
         title={rootPath}
       >
         <span className="w-3 shrink-0 text-slate-400">
@@ -303,12 +312,16 @@ function TreeRootRow({
               childEntries={childEntries}
               selectedFile={selectedFile}
               loadingPaths={loadingPaths}
+              fontSize={fontSize}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
             />
           ))}
           {children.length === 0 && (
-            <div className="px-2 py-0.5 font-mono text-xs text-slate-400" style={{ paddingLeft: 20 }}>
+            <div
+              className="px-2 py-0.5 font-mono text-slate-400"
+              style={{ paddingLeft: 20, fontSize }}
+            >
               (empty)
             </div>
           )}
@@ -353,6 +366,18 @@ export default function FloatingWorkspace({
   const [sceneSize, setSceneSize] = useState<SceneSize>({ w: 640, h: 460 });
 
   const [splitPct, setSplitPct] = useState(45);
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window === "undefined") return 12;
+    const saved = localStorage.getItem("workspace-fontSize");
+    return saved ? Number(saved) : 12;
+  });
+  const changeFontSize = (delta: number) => {
+    setFontSize((prev) => {
+      const next = Math.min(20, Math.max(10, prev + delta));
+      localStorage.setItem("workspace-fontSize", String(next));
+      return next;
+    });
+  };
   const [childEntries, setChildEntries] = useState<Map<string, Entry[]>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -403,6 +428,11 @@ export default function FloatingWorkspace({
   // 初回マウント時に 1 回だけ読み込む。
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void refreshList(); }, [refreshList]);
+
+  // 初回ロード時、登録済みワークスペースがあれば最も最近開いたものを自動で開く
+  // (listWorkspaces は lastOpenedAt 降順で返るので、先頭 = 前回開いた ws)。
+  // openWorkspace は下で定義されるので、effect 本体はマウント後に実行される。
+  const autoOpenedRef = useRef(false);
 
   const dragRef = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
   const resizeRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null);
@@ -496,6 +526,15 @@ export default function FloatingWorkspace({
     },
     [loadDir, onWorkspaceChange, refreshList],
   );
+
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (workspace) return;
+    if (registered.length === 0) return;
+    autoOpenedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void openWorkspace(registered[0]);
+  }, [registered, workspace, openWorkspace]);
 
   const createWorkspace = useCallback(async () => {
     const label = prompt("新しいワークスペースの名前を入力", "project");
@@ -701,6 +740,31 @@ export default function FloatingWorkspace({
           <span className="truncate font-mono text-[10px] text-slate-400">
             {workspace?.cwd ?? "(no workspace open)"}
           </span>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                changeFontSize(-1);
+              }}
+              className="rounded px-1 text-[10px] text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              title="文字サイズを下げる"
+            >
+              A-
+            </button>
+            <span className="min-w-[1.5rem] text-center font-mono text-[10px] text-slate-500">{fontSize}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                changeFontSize(1);
+              }}
+              className="rounded px-1 text-[10px] text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              title="文字サイズを上げる"
+            >
+              A+
+            </button>
+          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -752,27 +816,27 @@ export default function FloatingWorkspace({
             onClick={onStartCoding}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#15151c] bg-[#15151c] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#2a2a35] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Coding を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Coding パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <CodeXml className="h-3.5 w-3.5 shrink-0" />
-            Coding
+            Code
           </button>
           <button
             type="button"
             onClick={onStartBusiness}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-[#217346] bg-[#217346] px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#1a5c38] disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Business を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Business パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <CodeXml className="h-3.5 w-3.5 shrink-0" />
-            Business
+            Biz
           </button>
           <button
             type="button"
             onClick={onStartUbuntu}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-indigo-700 bg-indigo-700 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Bash を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Bash パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
             Bash
@@ -855,11 +919,12 @@ export default function FloatingWorkspace({
               childEntries={childEntries}
               selectedFile={selectedFile}
               loadingPaths={loadingPaths}
+              fontSize={fontSize}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
             />
           ) : (
-            <div className="px-3 py-2 font-mono text-xs text-slate-400">
+            <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>
               「一覧」から選ぶか、「新規」でワークスペースを作成してください。
             </div>
           )}
@@ -870,24 +935,29 @@ export default function FloatingWorkspace({
           onPointerMove={onSplitPointerMove}
           onPointerUp={onSplitPointerUp}
         />
-        <div className="relative min-w-0 flex-1 overflow-auto bg-white">
-          {fileLoading && (
-            <div className="px-3 py-2 font-mono text-xs text-slate-400">reading…</div>
-          )}
-          {!fileLoading && fileContent && (
-            <>
-              <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] text-slate-500">
-                {fileContent.path.split("/").pop()}
-                {fileContent.truncated && <span className="ml-2 text-amber-600">(truncated to 512KB)</span>}
-              </div>
-              <pre className="px-3 py-2 font-mono text-[11px] whitespace-pre-wrap break-words text-slate-800">
-                {fileContent.content}
-              </pre>
-            </>
-          )}
-          {!fileLoading && !fileContent && (
-            <div className="px-3 py-2 font-mono text-xs text-slate-400">ファイルを選択</div>
-          )}
+        <div className="relative min-w-0 flex-1 overflow-hidden bg-white">
+          <div className="h-full overflow-auto">
+            {fileLoading && (
+              <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>reading…</div>
+            )}
+            {!fileLoading && fileContent && (
+              <>
+                <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] text-slate-500">
+                  {fileContent.path.split("/").pop()}
+                  {fileContent.truncated && <span className="ml-2 text-amber-600">(truncated to 512KB)</span>}
+                </div>
+                <pre
+                  className="px-3 py-2 font-mono whitespace-pre-wrap break-words text-slate-800"
+                  style={{ fontSize }}
+                >
+                  {fileContent.content}
+                </pre>
+              </>
+            )}
+            {!fileLoading && !fileContent && (
+              <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>ファイル表示（簡易）</div>
+            )}
+          </div>
           <div
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
             onPointerDown={onResizePointerDown}
@@ -923,7 +993,7 @@ export default function FloatingWorkspace({
                   setFlipped(false);
                 }}
                 className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
-                title="ワークスペースに戻る"
+                title="Workspace パネルに戻る"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
               </button>
