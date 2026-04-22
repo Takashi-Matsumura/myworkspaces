@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSub } from "@/lib/user";
+import { getUser } from "@/lib/user";
 import {
   encodeApiKey,
   getSettings,
@@ -10,8 +10,6 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// UI から来るペイロードは apiKey が plain。保存時に base64 化して書き戻す。
-// GET 時は base64 のまま返す (UI は decode してマスク表示する)。
 function sanitize(p: unknown): UserSettings {
   const body = (p ?? {}) as Record<string, unknown>;
   const oc = (body.opencode ?? {}) as Record<string, unknown>;
@@ -33,15 +31,17 @@ function sanitize(p: unknown): UserSettings {
 }
 
 export async function GET(request: NextRequest) {
-  const sub = getSub(request);
-  const settings = await getSettings(sub);
+  const user = await getUser(request);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const settings = await getSettings(user.id);
   return NextResponse.json({ settings });
 }
 
 export async function PUT(request: NextRequest) {
-  const sub = getSub(request);
+  const user = await getUser(request);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const body = (await request.json().catch(() => ({}))) as unknown;
   const next = sanitize(body);
-  await saveSettings(sub, next);
+  await saveSettings(user.id, next);
   return NextResponse.json({ settings: next });
 }

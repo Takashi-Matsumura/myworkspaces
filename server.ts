@@ -1,14 +1,14 @@
+import "dotenv/config";
 import { createServer, type IncomingMessage } from "node:http";
 import next from "next";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
   attachSession,
-  ensureHomeVolume,
   ensureImageBuilt,
   shutdownAllSessions,
   type Cmd,
 } from "./lib/docker-session";
-import { getSub } from "./lib/user";
+import { getUser } from "./lib/user";
 import { DEFAULT_WS_PATH } from "./lib/ws-protocol";
 
 const port = Number(process.env.PORT) || 3000;
@@ -43,7 +43,11 @@ function rejectEarly(ws: WebSocket, code: number, reason: string): void {
 async function handlePtyUpgrade(ws: WebSocket, req: IncomingMessage): Promise<void> {
   try {
     const url = new URL(req.url ?? "/", "http://localhost");
-    const sub = getSub(req);
+    const user = await getUser(req);
+    if (!user) {
+      rejectEarly(ws, 4401, "unauthorized");
+      return;
+    }
     const cwd = url.searchParams.get("cwd") ?? WORKSPACE_ROOT;
     const cmd = parseCmd(url.searchParams.get("cmd"));
     const sessionId = url.searchParams.get("sessionId");
@@ -57,7 +61,7 @@ async function handlePtyUpgrade(ws: WebSocket, req: IncomingMessage): Promise<vo
       return;
     }
 
-    await attachSession({ sub, cwd, cmd, ws, sessionId });
+    await attachSession({ sub: user.id, cwd, cmd, ws, sessionId });
   } catch (err) {
     console.error("[server] pty upgrade failed", err);
     rejectEarly(ws, 4500, "internal error");
@@ -67,11 +71,10 @@ async function handlePtyUpgrade(ws: WebSocket, req: IncomingMessage): Promise<vo
 async function main(): Promise<void> {
   await app.prepare();
 
-  // イメージは 1 回だけ build。初回は 1-2 分かかる。
-  // ホームボリュームはデモ用 sub を先に作っておき、初回接続の遅延を減らす。
+  // イメージは 1 回だけ build。ホームボリュームはログイン後に遅延作成されるため
+  // ここでは事前作成しない。
   try {
     await ensureImageBuilt();
-    await ensureHomeVolume(getSub());
   } catch (err) {
     console.error(
       "[server] startup prep failed — sessions will error until fixed:",

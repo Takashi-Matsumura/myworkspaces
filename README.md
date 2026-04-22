@@ -4,12 +4,13 @@
 各ユーザーのコンテナには [OpenCode](https://opencode.ai/) CLI と Ubuntu の bash が入っていて、ホワイトボード上にフロートするターミナルパネルから **Coding (opencode)** / **Business (opencode)** / **Bash (素の Ubuntu)** の 3 種類を使い分けられる。
 
 > ⚠️ **これは開発・検証用のデモ実装です。**
-> 認証は `sub="demo"` 固定で、ホストの Docker socket を使います。そのままインターネットに公開しないでください（詳細は「セキュリティ注意」セクション）。
+> 認証はアカウント／パスワード方式（Phase 2）、パスワードは bcrypt でハッシュ化して PostgreSQL に保存。ホストの Docker socket を使うため、そのままインターネットに公開しないでください（詳細は「セキュリティ注意」セクション）。
 
 ## 特徴
 
+- 🔐 **アカウント／パスワード認証** — `/login` から登録・ログイン。ユーザーごとにコンテナ・ワークスペース・設定が完全分離
 - 🖼️ **Excalidraw の無限ホワイトボード** を背景に、必要なパネルをフロートで開く UI
-- 🐳 **ユーザーごとに 1 つのコンテナ** (`myworkspaces-shell-{sub}`) を永続起動し、`/root` は named volume で保持
+- 🐳 **ユーザーごとに 1 つのコンテナ** (`myworkspaces-shell-{User.id}`) を永続起動し、`/root` は named volume で保持
 - 📂 **1 コンテナに複数ワークスペース** (`/root/workspaces/{id}`) — Workspace パネルから作成・切替・リネーム・削除（前回開いたものは起動時に自動で開く）
 - 💻 **3 種類のターミナルパネル**
   - **Code** — `opencode` を起動した対話シェル（コード支援向け）
@@ -45,6 +46,7 @@ Browser
 
 - Node.js 22 以上
 - Docker Desktop（または同等の Docker 環境、ホスト側の `/var/run/docker.sock` を使う）
+- PostgreSQL 16（`docker-compose.yml` に同梱、`npm run db:up` で起動）
 - （任意）ホスト側で `llama-server` を `:8080` で動かすと opencode から利用可（`host.docker.internal` 経由）
 
 ## セットアップ
@@ -52,13 +54,16 @@ Browser
 ```bash
 git clone https://github.com/Takashi-Matsumura/myworkspaces.git
 cd myworkspaces
+cp .env.example .env   # SESSION_SECRET を十分長い値に変える
 npm install
+npm run db:up          # PostgreSQL を docker-compose で起動
+npm run db:migrate     # Prisma の初回マイグレーション
 npm run dev
 ```
 
 初回起動時に `myworkspaces-sandbox:latest` イメージが自動ビルドされる（1〜2 分、opencode CLI を `curl | bash` で取得するため外部ネットワークが必要）。以降は skip される。
 
-ブラウザで http://localhost:3000 を開くと、ホワイトボード上に Workspace パネルが出る。「新規」でワークスペースを作成してから、Code / Biz / Bash のいずれかのボタンでターミナルパネルを起動する。
+ブラウザで http://localhost:3000 を開くと `/login` にリダイレクトされる。「新規登録」タブからアカウントを作成してログインすると、ホワイトボード上に Workspace パネルが出る。「新規」でワークスペースを作成してから、Code / Biz / Bash のいずれかのボタンでターミナルパネルを起動する。
 
 ## スクリプト
 
@@ -68,6 +73,10 @@ npm run dev
 | `npm run build` | Next.js 本番ビルド |
 | `npm run start` | production モードで `tsx server.ts` を起動 |
 | `npm run lint` | ESLint |
+| `npm run db:up` | PostgreSQL を docker-compose で起動 |
+| `npm run db:down` | PostgreSQL を停止 |
+| `npm run db:migrate` | `prisma migrate dev`（スキーマ変更後） |
+| `npm run db:studio` | Prisma Studio を起動 |
 
 ## 使い方
 
@@ -87,9 +96,15 @@ npm run dev
 
 ## API
 
+全ての API は Cookie 認証必須（未認証は 401）。
+
 | method | path | body / query | 用途 |
 |---|---|---|---|
-| `GET` | `/api/user/workspaces` | — | 自 sub のワークスペース一覧 |
+| `POST` | `/api/auth/register` | `{username, password}` | 新規登録。成功時 Cookie `mw_session` を発行 |
+| `POST` | `/api/auth/login` | `{username, password}` | ログイン |
+| `POST` | `/api/auth/logout` | — | ログアウト（Cookie を破棄） |
+| `GET` | `/api/auth/me` | — | 現在のユーザ（`{user: null}` で未ログイン） |
+| `GET` | `/api/user/workspaces` | — | 自ユーザのワークスペース一覧 |
 | `POST` | `/api/user/workspaces` | `{label}` or `{id,label}` | 作成 / rename |
 | `PATCH` | `/api/user/workspaces` | `{id}` | lastOpenedAt 更新 |
 | `DELETE` | `/api/user/workspaces?id=` | — | 削除（実体 + メタ） |
@@ -99,18 +114,18 @@ npm run dev
 | `GET` | `/api/container` | — | コンテナ状態 |
 | `DELETE` | `/api/container` | — | コンテナ作り直し |
 
-WebSocket: `GET /ws/pty?cwd=<path>&cmd=opencode|shell&sessionId=<optional>` — attachSession。切断から 5 分以内は `sessionId` 再送で再接続可。
+WebSocket: `GET /ws/pty?cwd=<path>&cmd=opencode|shell&sessionId=<optional>` — attachSession。Cookie 必須（未認証は `close(4401)`）。切断から 5 分以内は `sessionId` 再送で再接続可。
 
 ## 認証の拡張ポイント
 
-現状は単一ユーザー `sub="demo"` 固定。`lib/user.ts` の `getSub(req)` を書き換えれば、OIDC / Cookie / ヘッダ等に差し替えられる。呼び出し側は server / API route の 1 点を除きこの関数だけに依存しているので、影響範囲は限定的。
+Phase 2 で導入した認証はアカウント／パスワード方式。OIDC 等に差し替えるには `lib/user.ts` の `getUser(req)` 1 点を書き換えれば、呼び出し側 (API route / server.ts / proxy.ts) はそのまま使える。DB には `User` / `Session` / `Workspace` のスキーマが入っているので、外部 ID プロバイダと `User.username` を紐付けるだけで移行可能。
 
 ## セキュリティ注意
 
 このリポジトリは **ローカル開発・検証用** を想定している。そのままインターネットに公開するのは危険。
 
 - **ホストの Docker socket を使う** — サーバプロセスがコンテナを自由に起動・削除できる。つまりサーバが乗っ取られるとホストまで抜ける可能性がある。
-- **認証が未実装** — 全員が同じ `sub="demo"` を共有する。複数ユーザーに出すなら最低でも `lib/user.ts` の `getSub()` を OIDC 等に差し替えること。
+- **認証は最小限** — Cookie セッション + bcrypt パスワード。本番では `SESSION_SECRET` を必ず長いランダム文字列に変えること。強度要求・レートリミット・メール認証等は未実装。
 - **コンテナ capability を一部残している** — `apt install` を通すため `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `FSETID`, `SETGID`, `SETUID` を付与している（`ALL` は落としている）。
 - **アップロードサイズ・コマンド実行に制限を入れていない** — 悪意あるユーザーはコンテナを食いつぶせる。リソース制限は `docker-session.ts` で追加可能。
 
@@ -118,7 +133,7 @@ WebSocket: `GET /ws/pty?cwd=<path>&cmd=opencode|shell&sessionId=<optional>` — 
 
 - 初回イメージビルドで opencode CLI を `curl | bash` でダウンロードする都合、外部ネットワークが必要
 - named volume はホストからは `docker volume inspect myworkspaces-home-{sub}` の mount point 経由でしか見えない
-- ユーザー管理は `sub="demo"` 固定（Phase 2 で OIDC 等に差し替え予定）
+- ユーザー管理はアカウント／パスワード方式（Phase 2）。将来 OIDC への差し替えは `lib/user.ts` の `getUser()` を置き換えれば済む
 
 ## 謝辞
 

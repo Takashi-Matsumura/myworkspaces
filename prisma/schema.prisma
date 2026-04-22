@@ -1,0 +1,46 @@
+// myworkspaces Phase 2: ユーザ管理スキーマ
+//
+// User: ログイン可能なユーザ。username は一意。passwordHash は bcrypt
+// Session: Cookie で持つ不透明トークン。期限切れはクリーンアップ対象
+// Workspace: ユーザごとのワークスペース (コンテナ内 /root/workspaces/{id}/ と 1:1)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String      @id @default(cuid())
+  username     String      @unique
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  workspaces   Workspace[]
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id            String   @id
+  userId        String
+  label         String
+  createdAt     DateTime @default(now())
+  lastOpenedAt  DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

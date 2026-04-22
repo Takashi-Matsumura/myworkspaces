@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSub } from "@/lib/user";
+import { getUser } from "@/lib/user";
 import {
   getContainerStatus,
   removeContainer,
@@ -9,9 +9,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const sub = getSub(request);
+  const user = await getUser(request);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const status = await getContainerStatus(sub);
+    const status = await getContainerStatus(user.id);
     return NextResponse.json(status);
   } catch (err) {
     console.error("[api/container] status failed", err);
@@ -23,9 +24,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const sub = getSub(request);
+  const user = await getUser(request);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const removed = await removeContainer(sub);
+    const removed = await removeContainer(user.id);
     return NextResponse.json({ removed });
   } catch (err) {
     console.error("[api/container] remove failed", err);
