@@ -17,6 +17,7 @@ myworkspaces は [opencode-demo](https://github.com/Takashi-Matsumura/opencode-d
 - **認証**: アカウント／パスワード方式。`/login` で登録・ログイン。セッションは PostgreSQL (`Session` テーブル) で管理し、署名付き HttpOnly Cookie `mw_session` で保持。`lib/user.ts` の `getUser(req)` が Cookie → `User` を解決する唯一の窓口 (OIDC 移行時はここを差し替える)
 - **データベース**: PostgreSQL 16 (docker-compose)。Prisma 7 をアダプタ (`@prisma/adapter-pg`) 経由で使用
 - Next.js と WebSocket を **同一プロセス** (`server.ts`) に相乗りし、`/ws/pty` でターミナルを中継。WS も Cookie 認証済み
+- **ホワイトボード永続化**: Excalidraw の描画をユーザごとに `Whiteboard` テーブルに保存。`onChange` → `getSceneVersion` で変更検知 → 1.5 秒デバウンスで `/api/whiteboard` に PUT。ログイン時に `/api/whiteboard` GET で復元
 
 ## ファイル構成の概略
 
@@ -24,7 +25,7 @@ myworkspaces は [opencode-demo](https://github.com/Takashi-Matsumura/opencode-d
 server.ts                    # Next.js + WS (/ws/pty) を相乗りする custom server
 proxy.ts                     # Next.js 16 proxy (旧 middleware)。Cookie 有無で /login へガード
 prisma/
-  schema.prisma              # User / Session / Workspace のスキーマ
+  schema.prisma              # User / Session / Workspace / Whiteboard のスキーマ
   migrations/                # prisma migrate dev の履歴
 prisma.config.ts             # Prisma 7 の設定 (datasource + schema path)
 docker-compose.yml           # 開発用 PostgreSQL (postgres:16, :5432)

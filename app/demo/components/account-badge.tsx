@@ -18,6 +18,8 @@ export function AccountBadge() {
   const busy = loggingOut || transitioning;
 
   useEffect(() => {
+    // SSR ガード: portal を使うには document にアクセス可能になってからレンダする必要がある
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     let cancel = false;
     fetch("/api/auth/me")
