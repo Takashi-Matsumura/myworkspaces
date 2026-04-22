@@ -6,6 +6,16 @@ import { Loader2 } from "lucide-react";
 
 type Mode = "login" | "register";
 
+// デモ用サンプルアカウント。
+// demo/demo は scripts/seed-demo-user.mjs で作成。
+// alice / bob は Phase 2 開発中に curl で登録した E2E テスト用。
+// 本物のパスワード管理ではないので、ここに平文で載せてよい。
+const DEMO_ACCOUNTS: Array<{ username: string; password: string }> = [
+  { username: "demo", password: "demo" },
+  { username: "alice", password: "securepass123" },
+  { username: "bob", password: "hunter2bob" },
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
@@ -159,6 +169,34 @@ export default function LoginPage() {
             </button>
           </fieldset>
         </form>
+
+        {mode === "login" ? (
+          <div className="mt-6 pt-4 border-t border-dashed border-neutral-200">
+            <p className="text-[11px] font-medium text-neutral-500 mb-2">
+              デモ用アカウント <span className="text-neutral-400">(クリックで入力)</span>
+            </p>
+            <ul className="space-y-1">
+              {DEMO_ACCOUNTS.map((a) => (
+                <li key={a.username}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setUsername(a.username);
+                      setPassword(a.password);
+                      setError(null);
+                    }}
+                    className="w-full inline-flex items-center justify-between gap-2 rounded px-2 py-1 font-mono text-[11px] text-neutral-600 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-neutral-800">{a.username}</span>
+                    <span className="text-neutral-400">/</span>
+                    <span className="flex-1 text-left">{a.password}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
 
       {busy ? (

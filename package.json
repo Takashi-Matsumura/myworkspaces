@@ -11,6 +11,7 @@
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
+    "db:seed-demo": "tsx scripts/seed-demo-user.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
