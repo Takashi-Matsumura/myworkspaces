@@ -12,6 +12,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  ShieldCheck,
 } from "lucide-react";
 
 type Provider = "llama-server" | "anthropic" | "openai";
@@ -31,13 +32,22 @@ type SettingsShape = {
 type ContainerStatus = {
   exists: boolean;
   running: boolean;
+  networkMode?: string;
+  isolated?: boolean;
 };
 
-type TabKey = "opencode" | "appearance" | "container" | "info";
+type NetworkStatus = {
+  requested: boolean;
+  effective: boolean | null;
+  networkMode: string | null;
+};
+
+type TabKey = "opencode" | "appearance" | "network" | "container" | "info";
 
 const TABS: { key: TabKey; label: string; icon: typeof Sliders }[] = [
   { key: "opencode", label: "OpenCode", icon: Sliders },
   { key: "appearance", label: "外観", icon: Palette },
+  { key: "network", label: "ネットワーク", icon: ShieldCheck },
   { key: "container", label: "コンテナ", icon: ContainerIcon },
   { key: "info", label: "情報", icon: Info },
 ];
@@ -74,6 +84,9 @@ export default function SettingsPanel({
   const [containerStatus, setContainerStatus] = useState<ContainerStatus | null>(null);
   const [containerBusy, setContainerBusy] = useState(false);
 
+  const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
+  const [networkBusy, setNetworkBusy] = useState(false);
+
   const loadSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
@@ -103,9 +116,53 @@ export default function SettingsPanel({
     }
   }, []);
 
+  const loadNetwork = useCallback(async () => {
+    try {
+      const res = await fetch("/api/user/network", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as NetworkStatus;
+      setNetworkStatus(data);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  const toggleNetwork = useCallback(
+    async (next: boolean) => {
+      if (networkBusy) return;
+      const msg = next
+        ? "ネットワーク隔離を ON にします。コンテナが再作成され、実行中のターミナルはすべて閉じます。/root の作業ファイルは保持されます。続けますか？"
+        : "ネットワーク隔離を OFF にします。コンテナが再作成され、実行中のターミナルはすべて閉じます。/root の作業ファイルは保持されます。続けますか？";
+      if (typeof window !== "undefined" && !window.confirm(msg)) return;
+      setNetworkBusy(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/user/network", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isolated: next }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        await Promise.all([loadNetwork(), loadContainer()]);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setNetworkBusy(false);
+      }
+    },
+    [networkBusy, loadNetwork, loadContainer],
+  );
+
   // 初回マウント時に 1 回だけ取得。
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void loadSettings(); void loadContainer(); }, [loadSettings, loadContainer]);
+  useEffect(() => {
+    void loadSettings();
+    void loadContainer();
+    void loadNetwork();
+  }, [loadSettings, loadContainer, loadNetwork]);
 
   useEffect(() => {
     if (!saved) return;
@@ -314,6 +371,105 @@ export default function SettingsPanel({
               <p className="mt-1 text-[10px] text-slate-400">
                 既存のターミナルは個別に保存されたサイズを使います。新しく開くターミナルにこの値が適用されます。
               </p>
+            </div>
+          </div>
+        )}
+
+        {tab === "network" && (
+          <div className="flex flex-col gap-3">
+            <div className="rounded border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">ネットワーク隔離</span>
+                <button
+                  type="button"
+                  onClick={() => void loadNetwork()}
+                  className="rounded p-1 text-slate-500 hover:bg-white"
+                  title="再取得"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
+
+              {networkStatus ? (
+                <>
+                  <div className="mb-3 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void toggleNetwork(!networkStatus.requested)}
+                      disabled={networkBusy}
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                        networkStatus.requested ? "bg-emerald-500" : "bg-slate-300"
+                      } disabled:opacity-50`}
+                      role="switch"
+                      aria-checked={networkStatus.requested}
+                      title={networkStatus.requested ? "ON → OFF" : "OFF → ON"}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                          networkStatus.requested ? "translate-x-5" : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                    <div className="font-mono text-[11px] text-slate-700">
+                      {networkBusy
+                        ? "切り替え中…"
+                        : networkStatus.requested
+                          ? "隔離: ON"
+                          : "隔離: OFF"}
+                    </div>
+                  </div>
+
+                  <p className="mb-2 text-[11px] leading-relaxed text-slate-600">
+                    ON にするとコンテナから <code>example.com</code> などの外部インター
+                    ネットには到達できなくなります。ホスト上の llama-server
+                    (<code>host.docker.internal:8080</code>) への接続は引き続き可能です。
+                  </p>
+
+                  <div className="mt-2 flex flex-col gap-1 font-mono text-[10px] text-slate-500">
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-slate-400">設定値</span>
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          networkStatus.requested ? "bg-emerald-500" : "bg-slate-400"
+                        }`}
+                      />
+                      <span>{networkStatus.requested ? "ON" : "OFF"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-slate-400">実効</span>
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          networkStatus.effective === null
+                            ? "bg-slate-300"
+                            : networkStatus.effective
+                              ? "bg-emerald-500"
+                              : "bg-slate-400"
+                        }`}
+                      />
+                      <span>
+                        {networkStatus.effective === null
+                          ? "コンテナ未作成 (次回起動で反映)"
+                          : networkStatus.effective
+                            ? "ON"
+                            : "OFF"}
+                      </span>
+                    </div>
+                    {networkStatus.networkMode && (
+                      <div className="flex items-center gap-2">
+                        <span className="w-16 text-slate-400">network</span>
+                        <span>{networkStatus.networkMode}</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="font-mono text-[11px] text-slate-400">loading…</div>
+              )}
+            </div>
+
+            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-800">
+              ⚠ 切り替えるとコンテナが再作成され、実行中のターミナルはすべて閉じます。
+              <code>/root</code> のファイルは named volume に保存されているため失われません。
             </div>
           </div>
         )}

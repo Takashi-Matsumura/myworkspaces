@@ -30,6 +30,8 @@ type ContainerInfo = {
   exists: boolean;
   running: boolean;
   id?: string;
+  networkMode?: string;
+  isolated?: boolean;
 };
 
 type ScenePos = { x: number; y: number };
@@ -733,6 +735,14 @@ export default function FloatingWorkspace({
               title={`Docker container ID (${containerInfo.running ? "running" : "stopped"})`}
             >
               {containerInfo.id}
+            </span>
+          )}
+          {containerInfo?.isolated && (
+            <span
+              className="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-700"
+              title={`network: ${containerInfo.networkMode ?? "isolated"} (外部インターネット遮断)`}
+            >
+              🔒 隔離中
             </span>
           )}
         </div>

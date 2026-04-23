@@ -7,6 +7,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # - apt が `_apt` へ降格するのに必要: ca-certificates
 # - Node.js ビルド (native addon) 用: build-essential / python3
 # - opencode install スクリプト用: unzip
+# - ネットワーク検証: iputils-ping (ping) / iproute2 (ip) / dnsutils (dig)
+#   ネットワーク隔離機能の動作確認で ping / dig を使えるようにする。
+#   ping は CapDrop=ALL でも net.ipv4.ping_group_range のおかげで DGRAM socket 経由で動作する。
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
@@ -18,7 +21,10 @@ RUN apt-get update && \
       vim \
       unzip \
       build-essential \
-      python3 && \
+      python3 \
+      iputils-ping \
+      iproute2 \
+      dnsutils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

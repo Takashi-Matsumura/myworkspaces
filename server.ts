@@ -5,6 +5,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import {
   attachSession,
   ensureImageBuilt,
+  ensureIsolatedNetwork,
   shutdownAllSessions,
   type Cmd,
 } from "./lib/docker-session";
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
   // ここでは事前作成しない。
   try {
     await ensureImageBuilt();
+    await ensureIsolatedNetwork();
   } catch (err) {
     console.error(
       "[server] startup prep failed — sessions will error until fixed:",
