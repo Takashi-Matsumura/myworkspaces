@@ -9,6 +9,7 @@ import {
 import {
   shutdownSessionsForSub,
   stopContainer,
+  stopOpencodeSidecar,
   stopRagSidecar,
 } from "@/lib/docker-session";
 
@@ -24,11 +25,13 @@ export async function POST(request: NextRequest) {
     if (user) {
       try {
         shutdownSessionsForSub(user.id);
-        // shell と RAG サイドカーはライフサイクルを揃える。
-        // 片方だけ残すと「ログアウト済みなのに RAG コンテナは動いている」状態になる。
+        // shell と RAG / opencode サイドカーはライフサイクルを揃える。
+        // 片方だけ残すと「ログアウト済みなのに RAG や opencode serve は動いている」
+        // 状態になる。いずれも named volume は残すので再ログインは高速に復帰する。
         await Promise.all([
           stopContainer(user.id),
           stopRagSidecar(user.id),
+          stopOpencodeSidecar(user.id),
         ]);
       } catch (err) {
         console.warn("[auth/logout] container stop failed", err);

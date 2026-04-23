@@ -29,6 +29,22 @@ const RAG_NETWORK_PREFIX = "myworkspaces-user-";
 const RAG_INTERNAL_PORT = 9090;
 const RAG_ALIAS = "rag-sidecar";
 
+// opencode サイドカー (ヘッドレス HTTP サーバ)。
+// shell コンテナと **同じ named volume `myworkspaces-home-{sub}` を共有**し、
+// SQLite (WAL モード) の opencode.db を共有する。TUI と HTTP API のセッションが
+// 透過的に同じ DB を見るので、どちらから始めた会話も相互に参照できる。
+// Image は shell コンテナと共通 (myworkspaces-sandbox:latest、opencode 同梱)。
+const OPENCODE_IMAGE = IMAGE;
+const OPENCODE_CONTAINER_PREFIX = "myworkspaces-opencode-";
+const OPENCODE_INTERNAL_PORT = 9091;
+const OPENCODE_ALIAS = "opencode-server";
+// Phase 1 実測で serve プロセスは RSS 約 280MB。余裕を見て 512MB で制限する。
+// shell コンテナ (1GB) の余裕が TUI プロセス増で圧迫された時に巻き込まれない
+// よう、独立コンテナに切り出す設計の主要メリットがこの枠分離。
+const OPENCODE_MEMORY_BYTES = Number(
+  process.env.OPENCODE_MEMORY_BYTES ?? 512 * 1024 * 1024,
+);
+
 // 隔離モード用 user-defined bridge。
 // Internal: true にすることで、このネットワークに接続されたコンテナからは
 // 外部インターネットにも、gateway 経由でのホストにも到達できなくなる。
@@ -102,6 +118,10 @@ function ragVolumeName(sub: string): string {
 
 function userNetworkName(sub: string): string {
   return `${RAG_NETWORK_PREFIX}${sanitizeSub(sub)}`;
+}
+
+function opencodeContainerName(sub: string): string {
+  return `${OPENCODE_CONTAINER_PREFIX}${sanitizeSub(sub)}`;
 }
 
 // ─────────────────────────────────────────────
@@ -537,6 +557,181 @@ export async function getRagSidecarUrl(sub: string): Promise<string> {
   return `http://127.0.0.1:${hostPort}`;
 }
 
+// ─────────────────────────────────────────────
+// opencode サイドカー (ensure / remove / stop / URL 解決)
+// ─────────────────────────────────────────────
+
+// opencode serve をヘッドレスで常駐させる。shell コンテナと同じ named volume
+// を mount することで opencode.db (SQLite WAL) を共有し、TUI と HTTP API で
+// セッションを共有する。Image は shell と共通。
+// CORS / --pure / 認証などの運用オプションは UI 実装時に必要に応じて追加する。
+export async function ensureOpencodeSidecar(
+  sub: string,
+  isolated: boolean,
+): Promise<Docker.Container> {
+  const name = opencodeContainerName(sub);
+  const existing = docker.getContainer(name);
+  try {
+    const info = await existing.inspect();
+    if (!info.State.Running) {
+      await existing.start();
+      console.log(`[docker] started existing opencode sidecar: ${name}`);
+    }
+    return existing;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status !== 404) throw err;
+  }
+
+  // image と user network / egress proxy は shell コンテナと共通で ensure。
+  await ensureImageBuilt();
+  const userNet = await ensureUserNetwork(sub);
+  if (isolated) {
+    await ensureIsolatedNetwork();
+    await ensureEgressProxyContainer();
+  }
+  // shell コンテナと同じ home volume を共有。これが DB 共有の核。
+  const home = await ensureHomeVolume(sub);
+
+  // 認証。.env に OPENCODE_SERVER_PASSWORD があれば Basic 認証をかける。
+  // 空のままだと serve が "server is unsecured" 警告を出すが user-{sub}
+  // network 内に閉じているので運用上は問題ない (ホスト公開も 127.0.0.1 bind)。
+  const password = process.env.OPENCODE_SERVER_PASSWORD ?? "";
+
+  try {
+    const created = await docker.createContainer({
+      name,
+      Image: OPENCODE_IMAGE,
+      WorkingDir: "/root",
+      Env: [
+        "TERM=xterm-256color",
+        `MYWORKSPACES_SUB=${sub}`,
+        ...(password
+          ? [
+              `OPENCODE_SERVER_PASSWORD=${password}`,
+              "OPENCODE_SERVER_USERNAME=opencode",
+            ]
+          : []),
+      ],
+      Cmd: [
+        "opencode",
+        "serve",
+        "--port",
+        String(OPENCODE_INTERNAL_PORT),
+        "--hostname",
+        "0.0.0.0",
+        "--log-level",
+        "INFO",
+      ],
+      Labels: {
+        [ROLE_LABEL_KEY]: "opencode-server",
+        [SUB_LABEL_KEY]: sub,
+        ...COMPOSE_LABELS,
+        "com.docker.compose.service": `opencode-${sanitizeSub(sub)}`,
+      },
+      ExposedPorts: {
+        [`${OPENCODE_INTERNAL_PORT}/tcp`]: {},
+      },
+      HostConfig: {
+        AutoRemove: false,
+        RestartPolicy: { Name: "unless-stopped" },
+        Memory: OPENCODE_MEMORY_BYTES,
+        PidsLimit: 256,
+        // shell コンテナと同等の最小 cap セット (apt 不使用の純粋な Node.js 動作)
+        CapDrop: ["ALL"],
+        CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"],
+        SecurityOpt: ["no-new-privileges"],
+        Mounts: [
+          {
+            Type: "volume",
+            Source: home,
+            Target: "/root",
+          },
+        ],
+        NetworkMode: userNet,
+        // Next.js (ホスト) から HTTP/SSE を叩くため 9091 を 127.0.0.1 の
+        // ランダム port に公開。getOpencodeServerUrl で解決する。
+        PortBindings: {
+          [`${OPENCODE_INTERNAL_PORT}/tcp`]: [
+            { HostIp: "127.0.0.1", HostPort: "" },
+          ],
+        },
+        ExtraHosts: isolated
+          ? [`host.docker.internal:${PROXY_IP}`]
+          : ["host.docker.internal:host-gateway"],
+      },
+      NetworkingConfig: {
+        EndpointsConfig: {
+          [userNet]: {
+            Aliases: [OPENCODE_ALIAS],
+          },
+        },
+      },
+    });
+    if (isolated) {
+      await docker.getNetwork(ISOLATED_NETWORK).connect({ Container: name });
+    }
+    await created.start();
+    console.log(
+      `[docker] created opencode sidecar: ${name} (isolated=${isolated})`,
+    );
+    return created;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 409) {
+      const c = docker.getContainer(name);
+      const info = await c.inspect();
+      if (!info.State.Running) await c.start();
+      return c;
+    }
+    throw err;
+  }
+}
+
+export async function removeOpencodeSidecar(sub: string): Promise<boolean> {
+  const name = opencodeContainerName(sub);
+  try {
+    await docker.getContainer(name).remove({ force: true });
+    console.log(`[docker] removed opencode sidecar: ${name}`);
+    return true;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 404) return false;
+    throw err;
+  }
+}
+
+// ログアウト時に呼ぶ。named volume (SQLite DB) は残すので次回ログイン時の
+// start が速い。
+export async function stopOpencodeSidecar(sub: string): Promise<boolean> {
+  const name = opencodeContainerName(sub);
+  try {
+    await docker.getContainer(name).stop({ t: 5 });
+    console.log(`[docker] stopped opencode sidecar: ${name}`);
+    return true;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 404) return false;
+    if (status === 304) return true; // 既に停止済み
+    throw err;
+  }
+}
+
+export async function getOpencodeServerUrl(sub: string): Promise<string> {
+  const isolated = await getUserNetworkIsolation(sub);
+  const container = await ensureOpencodeSidecar(sub, isolated);
+  const info = await container.inspect();
+  const bindings =
+    info.NetworkSettings?.Ports?.[`${OPENCODE_INTERNAL_PORT}/tcp`];
+  const hostPort = bindings?.[0]?.HostPort;
+  if (!hostPort) {
+    throw new Error(
+      `opencode sidecar ${opencodeContainerName(sub)} has no host port binding`,
+    );
+  }
+  return `http://127.0.0.1:${hostPort}`;
+}
+
 export async function ensureContainer(
   sub: string,
   net?: NetworkOptions,
@@ -564,6 +759,12 @@ export async function ensureContainer(
     void ensureRagSidecar(sub, effectiveIsolated).catch((err) =>
       console.warn(`[docker] ensureRagSidecar (warm) failed for ${sub}:`, err),
     );
+    void ensureOpencodeSidecar(sub, effectiveIsolated).catch((err) =>
+      console.warn(
+        `[docker] ensureOpencodeSidecar (warm) failed for ${sub}:`,
+        err,
+      ),
+    );
     return existing;
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
@@ -588,6 +789,9 @@ export async function ensureContainer(
   // これで opencode は常に http://rag-sidecar:9090/v1 で RAG プロキシに到達できる。
   const userNet = await ensureUserNetwork(sub);
   await ensureRagSidecar(sub, isolated);
+  // opencode サイドカー (ヘッドレス serve) も同じ per-user network / 同じ
+  // home volume で立ち上げ、TUI とセッション DB を共有する。
+  await ensureOpencodeSidecar(sub, isolated);
 
   const home = await ensureHomeVolume(sub);
   try {
@@ -675,9 +879,10 @@ export async function ensureContainer(
 
 export async function removeContainer(sub: string): Promise<boolean> {
   const name = containerName(sub);
-  // ユーザコンテナと rag サイドカー、per-user network はライフサイクルを揃える。
-  // named volume (home / rag-data) は残して次回起動で再利用。
+  // ユーザコンテナと rag / opencode の両サイドカー、per-user network は
+  // ライフサイクルを揃える。named volume (home / rag-data) は残して次回起動で再利用。
   await removeRagSidecar(sub);
+  await removeOpencodeSidecar(sub);
   try {
     await docker.getContainer(name).remove({ force: true });
     console.log(`[docker] removed container: ${name}`);
