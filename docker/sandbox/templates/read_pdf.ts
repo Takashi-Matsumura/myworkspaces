@@ -99,13 +99,16 @@ export default tool({
     }
 
     // pdfjs-dist の Node 向け legacy build を使う。worker 不要。
+    // Node.js の ESM import は NODE_PATH を見ないため、グローバル node_modules
+    // 経由で `pdfjs-dist/...` と subpath 指定しても解決できない。代わりに
+    // 絶対パスの .mjs を直接 import する (Linux の絶対パスは file:// 相当に
+    // 解釈される)。Dockerfile で /usr/lib/node_modules/pdfjs-dist が存在する前提。
+    const PDFJS_PATH = "/usr/lib/node_modules/pdfjs-dist/legacy/build/pdf.mjs"
     let pdfjsLib: typeof import("pdfjs-dist")
     try {
-      pdfjsLib = (await import(
-        "pdfjs-dist/legacy/build/pdf.mjs"
-      )) as typeof import("pdfjs-dist")
+      pdfjsLib = (await import(PDFJS_PATH)) as typeof import("pdfjs-dist")
     } catch (e) {
-      return `pdfjs-dist のロードに失敗しました (${(e as Error).message})。グローバルに pdfjs-dist を install してください。`
+      return `pdfjs-dist のロードに失敗しました (${(e as Error).message})。Dockerfile で pdfjs-dist を global install している前提です (${PDFJS_PATH})。`
     }
 
     let doc
