@@ -411,6 +411,14 @@ export function useOpencodeStream() {
     [],
   );
 
+  const abortSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    const resp = await fetch(
+      `/api/opencode/sessions/${encodeURIComponent(sessionId)}/abort`,
+      { method: "POST" },
+    );
+    return resp.ok;
+  }, []);
+
   return {
     state,
     refreshSessions,
@@ -418,5 +426,6 @@ export function useOpencodeStream() {
     createSession,
     deleteSession,
     sendPrompt,
+    abortSession,
   };
 }

@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { Plus, Trash2, Send, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Send, RefreshCw, Square } from "lucide-react";
 import {
   useOpencodeStream,
   type PartInfo,
@@ -31,6 +31,7 @@ export default function OpencodeChat() {
     createSession,
     deleteSession,
     sendPrompt,
+    abortSession,
   } = useOpencodeStream();
 
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -157,6 +158,9 @@ export default function OpencodeChat() {
             value={input}
             onChange={setInput}
             onSubmit={onSend}
+            onAbort={
+              activeId && busy ? () => void abortSession(activeId) : undefined
+            }
           />
         </section>
       </div>
@@ -261,6 +265,29 @@ function MessageView({
     el.scrollTop = el.scrollHeight;
   }, [totalChars, busy]);
 
+  // opencode は step-start / step-finish を挟んで複数の assistant message を
+  // 作るため、そのままだと 1 回の返答が複数の吹き出しに見えて読みにくい。
+  // 連続する同 role のメッセージを 1 グループにまとめる。
+  // (Hooks のルール上、early-return の前に置く必要がある)
+  const groups = useMemo(() => {
+    type Group = {
+      key: string;
+      role: string;
+      partIds: { pid: string; messageId: string }[];
+    };
+    const out: Group[] = [];
+    for (const m of messages) {
+      const last = out[out.length - 1];
+      const entries = m.partIds.map((pid) => ({ pid, messageId: m.id }));
+      if (last && last.role === m.role) {
+        last.partIds.push(...entries);
+      } else {
+        out.push({ key: m.id, role: m.role, partIds: entries });
+      }
+    }
+    return out;
+  }, [messages]);
+
   if (!sessionId) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-gray-500">
@@ -276,22 +303,22 @@ function MessageView({
       ref={scrollRef}
       className="flex-1 space-y-4 overflow-y-auto px-4 py-3 text-sm"
     >
-      {messages.map((m) => (
+      {groups.map((g) => (
         <div
-          key={m.id}
+          key={g.key}
           className={`rounded-lg px-3 py-2 ${
-            m.role === "user"
+            g.role === "user"
               ? "bg-gray-100"
               : "border border-emerald-200 bg-emerald-50/40"
           }`}
         >
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-            {m.role === "user" ? "あなた" : "opencode"}
+            {g.role === "user" ? "あなた" : "opencode"}
           </div>
-          {m.partIds.map((pid) => {
+          {g.partIds.map(({ pid, messageId }) => {
             const p = parts[pid];
             if (!p) return null;
-            return <MessagePart key={pid} part={p} />;
+            return <MessagePart key={`${messageId}:${pid}`} part={p} />;
           })}
         </div>
       ))}
@@ -337,12 +364,14 @@ function InputForm({
   value,
   onChange,
   onSubmit,
+  onAbort,
 }: {
   disabled: boolean;
   busy: boolean;
   value: string;
   onChange: (v: string) => void;
   onSubmit: () => void | Promise<void>;
+  onAbort?: () => void;
 }) {
   return (
     <form
@@ -370,14 +399,26 @@ function InputForm({
         disabled={disabled}
         className="flex-1 resize-none rounded border border-gray-300 px-2 py-1 text-sm focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
       />
-      <button
-        type="submit"
-        disabled={disabled || busy}
-        className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
-      >
-        <Send className="h-3.5 w-3.5" />
-        送信
-      </button>
+      {busy && onAbort ? (
+        <button
+          type="button"
+          onClick={onAbort}
+          className="flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+          title="生成を停止"
+        >
+          <Square className="h-3.5 w-3.5" />
+          停止
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={disabled || busy}
+          className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
+        >
+          <Send className="h-3.5 w-3.5" />
+          送信
+        </button>
+      )}
     </form>
   );
 }

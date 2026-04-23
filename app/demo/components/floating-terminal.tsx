@@ -10,9 +10,10 @@ import { X, Minus, Maximize2, ArrowUpDown } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
-// 現状 Business 裏面は opencode チャット UI に置き換え中 (Phase 3-2)。
-// RAG ドキュメントは別所に移設する予定。RagDocuments の import は戻す時に復活。
-const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
+// Business 裏面は BusinessBackPanel (チャット / RAG ドキュメントのタブ切替)。
+const BusinessBackPanel = dynamic(() => import("./business-back-panel"), {
+  ssr: false,
+});
 const OpencodeHintOverlay = dynamic(() => import("./opencode-hint-overlay"), {
   ssr: false,
 });
@@ -232,7 +233,7 @@ export default function FloatingTerminal({
               flipped
                 ? "表面に戻す"
                 : variant === "business"
-                  ? "チャット UI を開く"
+                  ? "チャット / RAG を開く"
                   : "シェルを開く"
             }
           >
@@ -332,7 +333,7 @@ export default function FloatingTerminal({
           >
             {headerBar(
               variant === "business"
-                ? `${style.label} — チャット (新 UI)`
+                ? `${style.label} — チャット / RAG`
                 : `${style.label} — shell`,
             )}
             {!minimized && (
@@ -342,7 +343,7 @@ export default function FloatingTerminal({
                 }`}
               >
                 {variant === "business" ? (
-                  <OpencodeChat />
+                  <BusinessBackPanel />
                 ) : backNonce > 0 && session ? (
                   <XtermView
                     key={`${backNonce}-${fontSize}-back`}
