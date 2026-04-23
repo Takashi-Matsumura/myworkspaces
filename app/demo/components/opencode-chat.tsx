@@ -286,16 +286,13 @@ export default function OpencodeChat({
           />
         )}
         <section className="flex flex-1 flex-col overflow-hidden">
-          <MessageView
+          <ChatThread
             sessionId={activeId}
             messages={activeId ? state.messagesBySession[activeId] ?? [] : []}
             parts={state.parts}
             busy={busy}
-          />
-          <InputForm
-            disabled={!activeId || sending}
-            busy={busy}
-            value={input}
+            input={input}
+            sending={sending}
             onChange={setInput}
             onSubmit={onSend}
             onAbort={
@@ -387,18 +384,29 @@ function SessionList({
   );
 }
 
-function MessageView({
+function ChatThread({
   sessionId,
   messages,
   parts,
   busy,
+  input,
+  sending,
+  onChange,
+  onSubmit,
+  onAbort,
+  skills,
 }: {
   sessionId: string | null;
   messages: { id: string; role: string; partIds: string[] }[];
   parts: Record<string, PartInfo>;
   busy: boolean;
+  input: string;
+  sending: boolean;
+  onChange: (v: string) => void;
+  onSubmit: () => void | Promise<void>;
+  onAbort?: () => void;
+  skills: SkillSummary[];
 }) {
-  // 自動スクロール: 新しい delta で下端に追従
   const scrollRef = useRef<HTMLDivElement>(null);
   const totalChars = useMemo(
     () =>
@@ -409,16 +417,198 @@ function MessageView({
       ),
     [messages, parts],
   );
+
+  // セッション切替時は問答無用で下端に。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [sessionId]);
+
+  // 以後、既に下端近くを見ている時だけ自動追従する。上にスクロールして
+  // 過去ログを読んでいる間は、新着 delta や composer の伸縮で引き戻さない。
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [totalChars, busy]);
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }, [totalChars, busy, input]);
+
+  // --- ストリーミング指標 -------------------------------------------------
+  // 文字数を live 集計しつつ、応答完了時に llama-server の /tokenize を叩いて
+  // 実トークン数に置き換える。tokens/秒 とコンテキスト利用率を表示する。
+  const busyStartRef = useRef<{ at: number; chars: number } | null>(null);
+  const [lastRun, setLastRun] = useState<{
+    chars: number;
+    seconds: number;
+    tokens: number | null; // /tokenize で確定したら埋まる
+  } | null>(null);
+  const [contextWindow, setContextWindow] = useState<number | null>(null);
+  const [sessionTokens, setSessionTokens] = useState<number | null>(null);
+
+  // llama-server /props からコンテキストウィンドウを 1 度だけ取得。
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resp = await fetch("/api/opencode/llama-stats");
+        if (!resp.ok) return;
+        const j = (await resp.json()) as { contextWindow?: number };
+        if (!cancelled && typeof j.contextWindow === "number") {
+          setContextWindow(j.contextWindow);
+        }
+      } catch {
+        // llama-server に届かないときは無表示で妥協する。
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // busy 中は 300ms 刻みで経過時間を再描画するためのダミー tick。
+  // (読み捨てだが、state 更新で親 ChatThread が再レンダされ、
+  //  下で `Date.now()` を読んでいる計算が refresh される)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const id = setInterval(() => setTick((t) => t + 1), 300);
+    return () => clearInterval(id);
+  }, [busy]);
+
+  // 最新の assistant 応答テキストとセッション全文を ref で参照可能に保つ。
+  // busy→idle の transition effect から、その時点の最新値を読むために使う。
+  const latestAssistantTextRef = useRef("");
+  const latestSessionTextRef = useRef("");
+  useEffect(() => {
+    let assistant = "";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role !== "user") {
+        assistant = messages[i].partIds
+          .map((pid) => {
+            const p = parts[pid];
+            // reasoning も tokenize 対象に含める (LLM が受け取る history に入る)
+            return p?.text ?? "";
+          })
+          .join("");
+        break;
+      }
+    }
+    latestAssistantTextRef.current = assistant;
+    latestSessionTextRef.current = messages
+      .flatMap((m) => m.partIds.map((pid) => parts[pid]?.text ?? ""))
+      .join("\n");
+  }, [messages, parts]);
+
+  // busy の立ち上がり / 立ち下がりで snapshot を更新し、完了時に /tokenize。
+  useEffect(() => {
+    if (busy) {
+      if (!busyStartRef.current) {
+        busyStartRef.current = { at: Date.now(), chars: totalChars };
+      }
+      return;
+    }
+    if (!busyStartRef.current) return;
+    const seconds = (Date.now() - busyStartRef.current.at) / 1000;
+    const chars = Math.max(0, totalChars - busyStartRef.current.chars);
+    setLastRun({ chars, seconds, tokens: null });
+    busyStartRef.current = null;
+
+    // 応答全文 → 正確なトークン数 (tok/s 計算用)
+    const assistant = latestAssistantTextRef.current;
+    if (assistant) {
+      void (async () => {
+        try {
+          const resp = await fetch("/api/opencode/llama-stats", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: assistant }),
+          });
+          if (!resp.ok) return;
+          const j = (await resp.json()) as { count?: number };
+          if (typeof j.count === "number") {
+            setLastRun((prev) =>
+              prev ? { ...prev, tokens: j.count ?? null } : prev,
+            );
+          }
+        } catch {
+          /* 失敗時は lastRun.tokens は null のまま */
+        }
+      })();
+    }
+    // セッション全文 → コンテキスト利用率
+    const session = latestSessionTextRef.current;
+    if (session) {
+      void (async () => {
+        try {
+          const resp = await fetch("/api/opencode/llama-stats", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: session }),
+          });
+          if (!resp.ok) return;
+          const j = (await resp.json()) as { count?: number };
+          if (typeof j.count === "number") setSessionTokens(j.count);
+        } catch {
+          /* ignore */
+        }
+      })();
+    }
+  }, [busy, totalChars]);
+
+  // セッションを切り替えたら前回の統計を持ち越さない。
+  useEffect(() => {
+    setLastRun(null);
+    setSessionTokens(null);
+    busyStartRef.current = null;
+  }, [sessionId]);
+
+  // 前回 run の chars↔tokens 比をストリーム中の推定に流用する。
+  // 未キャリブレーションの間は 1 token ≒ 2 chars を暫定値に。
+  const tokenRatio =
+    lastRun && lastRun.tokens && lastRun.chars > 0
+      ? lastRun.tokens / lastRun.chars
+      : 0.5;
+
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const ctxBadge =
+    sessionTokens !== null && contextWindow
+      ? ` · コンテキスト ${fmt(sessionTokens)} / ${fmt(contextWindow)} (${(
+          (sessionTokens / contextWindow) *
+          100
+        ).toFixed(1)}%)`
+      : contextWindow && !sessionTokens
+        ? ` · コンテキスト ${fmt(contextWindow)} 上限`
+        : "";
+
+  let statusLine: string;
+  if (busy && busyStartRef.current) {
+    const seconds = Math.max(
+      0.001,
+      (Date.now() - busyStartRef.current.at) / 1000,
+    );
+    const chars = Math.max(0, totalChars - busyStartRef.current.chars);
+    const estTokens = Math.round(chars * tokenRatio);
+    const rate = estTokens / seconds;
+    statusLine = `⚡ 生成中 · ~${fmt(estTokens)} トークン · ${seconds.toFixed(1)}s · ~${rate.toFixed(1)} トークン/秒${ctxBadge}`;
+  } else if (lastRun && lastRun.tokens && lastRun.tokens > 0) {
+    const rate = lastRun.tokens / Math.max(0.001, lastRun.seconds);
+    statusLine = `直近の応答 · ${fmt(lastRun.tokens)} トークン · ${lastRun.seconds.toFixed(1)}s · ${rate.toFixed(1)} トークン/秒${ctxBadge}`;
+  } else if (lastRun && lastRun.chars > 0) {
+    // tokenize 結果待ち (ネット遅延等)
+    const estTokens = Math.round(lastRun.chars * tokenRatio);
+    statusLine = `直近の応答 · ~${fmt(estTokens)} トークン · ${lastRun.seconds.toFixed(1)}s (計測中…)${ctxBadge}`;
+  } else if (totalChars > 0) {
+    statusLine = `セッション継続中${ctxBadge || ` · ${messages.length} メッセージ`}`;
+  } else if (contextWindow) {
+    statusLine = `新しい会話を始めましょう · コンテキスト上限 ${fmt(contextWindow)} トークン`;
+  } else {
+    statusLine = "新しい会話を始めましょう";
+  }
 
   // opencode は step-start / step-finish を挟んで複数の assistant message を
   // 作るため、そのままだと 1 回の返答が複数の吹き出しに見えて読みにくい。
   // 連続する同 role のメッセージを 1 グループにまとめる。
-  // (Hooks のルール上、early-return の前に置く必要がある)
   const groups = useMemo(() => {
     type Group = {
       key: string;
@@ -449,10 +639,9 @@ function MessageView({
   }
 
   return (
-    // fontSize は root で指定済み (継承)。ここでは em ベースのみ。
     <div
       ref={scrollRef}
-      className="flex-1 space-y-4 overflow-y-auto px-4 py-3"
+      className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-3"
     >
       {groups.map((g) => (
         <div
@@ -481,6 +670,16 @@ function MessageView({
           ● 応答を生成中...
         </div>
       )}
+      <InlineComposer
+        disabled={sending}
+        busy={busy}
+        value={input}
+        onChange={onChange}
+        onSubmit={onSubmit}
+        onAbort={onAbort}
+        skills={skills}
+        statusLine={statusLine}
+      />
     </div>
   );
 }
@@ -525,7 +724,10 @@ function MessagePart({ part }: { part: PartInfo }) {
   return null;
 }
 
-function InputForm({
+// メッセージ履歴のスクロール領域内に「次の下書きメッセージ」として並ぶ
+// インライン入力カード。下部固定のチャット欄ではなく会話フローの末尾に
+// 居座る形で、複数行入力にも内容量に応じて自動で伸びる。
+function InlineComposer({
   disabled,
   busy,
   value,
@@ -533,6 +735,7 @@ function InputForm({
   onSubmit,
   onAbort,
   skills,
+  statusLine,
 }: {
   disabled: boolean;
   busy: boolean;
@@ -541,6 +744,7 @@ function InputForm({
   onSubmit: () => void | Promise<void>;
   onAbort?: () => void;
   skills: SkillSummary[];
+  statusLine: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [suggestIndex, setSuggestIndex] = useState(0);
@@ -556,16 +760,27 @@ function InputForm({
   const showSuggest = !disabled && suggestions.length > 0;
 
   useEffect(() => {
-    // 候補の絞り込みで index が範囲外になったら先頭に戻す。
     if (suggestIndex >= suggestions.length) setSuggestIndex(0);
   }, [suggestions.length, suggestIndex]);
+
+  // 内容量に応じて textarea の高さを scrollHeight に追従。
+  // 上限は 40em 相当でクリップし、超えたら内部スクロール。
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const style = window.getComputedStyle(ta);
+    const emPx = parseFloat(style.fontSize) || 14;
+    const max = Math.round(emPx * 40);
+    const next = Math.min(ta.scrollHeight, max);
+    ta.style.height = `${next}px`;
+    ta.style.overflowY = ta.scrollHeight > max ? "auto" : "hidden";
+  }, [value]);
 
   const applySuggestion = useCallback(
     (name: string) => {
       onChange(`/${name} `);
-      // applySuggestion 直後は suggestions が空になるので popup は閉じる。
       setSuggestIndex(0);
-      // focus を戻す (候補ボタンクリックで外れた分)
       requestAnimationFrame(() => textareaRef.current?.focus());
     },
     [onChange],
@@ -573,7 +788,7 @@ function InputForm({
 
   return (
     <form
-      className="relative flex items-stretch gap-2 border-t border-gray-200 bg-white px-3 py-2"
+      className="relative rounded-lg border border-emerald-300/60 bg-white shadow-sm focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-200"
       onSubmit={(e) => {
         e.preventDefault();
         if (!disabled) void onSubmit();
@@ -581,7 +796,7 @@ function InputForm({
     >
       {showSuggest && (
         <div
-          className="absolute bottom-full left-3 right-3 z-10 mb-1 max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+          className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
           style={{ fontSize: "0.9em" }}
         >
           <div
@@ -596,7 +811,6 @@ function InputForm({
                 <button
                   type="button"
                   onMouseDown={(e) => {
-                    // blur で popup が消える前に onClick させる。
                     e.preventDefault();
                     applySuggestion(s.name);
                   }}
@@ -621,9 +835,15 @@ function InputForm({
           </ul>
         </div>
       )}
+      <div
+        className="px-3 pt-2 font-semibold uppercase tracking-wide text-emerald-700"
+        style={{ fontSize: "0.7em" }}
+      >
+        あなた (下書き)
+      </div>
       <textarea
         ref={textareaRef}
-        rows={2}
+        rows={1}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
@@ -647,45 +867,52 @@ function InputForm({
             }
             if (e.key === "Escape") {
               e.preventDefault();
-              // 先頭の `/` を消してサジェスト自体を畳む。
               onChange(value.replace(/^\//, ""));
               return;
             }
           }
-          // 通常の Enter 送信。
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             if (!disabled) void onSubmit();
           }
         }}
-        placeholder={
-          disabled
-            ? "セッションを選ぶと入力できます"
-            : "メッセージを入力 (Enter で送信 / Shift+Enter で改行 /「/」でスキル)"
-        }
+        placeholder="メッセージを入力 (Enter で送信 / Shift+Enter で改行 /「/」でスキル)"
         disabled={disabled}
-        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
+        className="block w-full resize-none border-0 bg-transparent px-3 py-2 leading-relaxed placeholder:text-gray-400 focus:outline-none focus:ring-0 disabled:bg-transparent disabled:text-gray-400"
       />
-      {busy && onAbort ? (
-        <button
-          type="button"
-          onClick={onAbort}
-          className="flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-4 font-medium text-white hover:bg-red-500"
-          title="生成を停止"
+      <div
+        className="flex items-center justify-between gap-2 border-t border-gray-100 px-3 py-1.5"
+        style={{ fontSize: "0.8em" }}
+      >
+        <span
+          className={`truncate font-mono ${
+            busy ? "text-emerald-700" : "text-gray-500"
+          }`}
+          title="応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差し替え。コンテキストはセッション全文のトークン数と上限の比"
         >
-          <Square style={{ width: "1.1em", height: "1.1em" }} />
-          停止
-        </button>
-      ) : (
-        <button
-          type="submit"
-          disabled={disabled || busy}
-          className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
-        >
-          <Send style={{ width: "1.1em", height: "1.1em" }} />
-          送信
-        </button>
-      )}
+          {statusLine}
+        </span>
+        {busy && onAbort ? (
+          <button
+            type="button"
+            onClick={onAbort}
+            className="flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-3 py-1 font-medium text-white hover:bg-red-500"
+            title="生成を停止"
+          >
+            <Square style={{ width: "1em", height: "1em" }} />
+            停止
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={disabled || busy || value.trim().length === 0}
+            className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
+          >
+            <Send style={{ width: "1em", height: "1em" }} />
+            送信
+          </button>
+        )}
+      </div>
     </form>
   );
 }
