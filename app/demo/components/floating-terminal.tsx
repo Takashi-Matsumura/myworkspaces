@@ -6,7 +6,14 @@ import {
   type PointerEvent,
 } from "react";
 import dynamic from "next/dynamic";
-import { X, Minus, Maximize2, ArrowUpDown, Plus } from "lucide-react";
+import {
+  X,
+  Minus,
+  Maximize2,
+  ArrowUpDown,
+  CirclePlus,
+  CircleMinus,
+} from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
@@ -214,19 +221,19 @@ export default function FloatingTerminal({
         <button
           type="button"
           onClick={() => changeFontSize(-1)}
-          className="rounded p-1 text-white hover:bg-white/10"
+          className="rounded p-0.5 text-white hover:bg-white/10"
           title="文字サイズを下げる"
         >
-          <Minus className="h-3.5 w-3.5 stroke-[2.5]" />
+          <CircleMinus className="h-4 w-4" />
         </button>
         <span className="font-mono text-[10px] text-white min-w-[1.5rem] text-center">{fontSize}</span>
         <button
           type="button"
           onClick={() => changeFontSize(1)}
-          className="rounded p-1 text-white hover:bg-white/10"
+          className="rounded p-0.5 text-white hover:bg-white/10"
           title="文字サイズを上げる"
         >
-          <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+          <CirclePlus className="h-4 w-4" />
         </button>
         {backAvailable && (
           <button
