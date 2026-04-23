@@ -4,6 +4,7 @@ import { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import { sanitizeSub } from "./user";
 import { getUserNetworkIsolation } from "./user-network";
+import { getCurrentWorkspaceId, workspaceCwd } from "./user-store";
 import type { ClientMessage } from "./ws-protocol";
 
 // イメージ / コンテナ / ボリュームの命名規約。
@@ -38,6 +39,10 @@ const OPENCODE_IMAGE = IMAGE;
 const OPENCODE_CONTAINER_PREFIX = "myworkspaces-opencode-";
 const OPENCODE_INTERNAL_PORT = 9091;
 const OPENCODE_ALIAS = "opencode-server";
+// 起動時 cwd に紐付いているワークスペース ID を Labels に残しておく。
+// 切替時にコンテナを作り直す判定に使う (opencode serve は session.directory を
+// プロセス cwd で固定するため、ワークスペース切替 = コンテナ再作成が必要)。
+const OPENCODE_WORKSPACE_LABEL = "io.myworkspaces.opencode.workspaceId";
 // Phase 1 実測で serve プロセスは RSS 約 280MB。余裕を見て 512MB で制限する。
 // shell コンテナ (1GB) の余裕が TUI プロセス増で圧迫された時に巻き込まれない
 // よう、独立コンテナに切り出す設計の主要メリットがこの枠分離。
@@ -564,12 +569,24 @@ export async function getRagSidecarUrl(sub: string): Promise<string> {
 // opencode serve をヘッドレスで常駐させる。shell コンテナと同じ named volume
 // を mount することで opencode.db (SQLite WAL) を共有し、TUI と HTTP API で
 // セッションを共有する。Image は shell と共通。
-// CORS / --pure / 認証などの運用オプションは UI 実装時に必要に応じて追加する。
+//
+// session.directory は **serve プロセスの cwd で固定** される (POST /session の
+// body で指定しても無視、serve サブコマンドも positional を受け付けない)。
+// そのためワークスペース切替時はコンテナを作り直す必要があるが、それは
+// activateOpencodeSidecar の責務。この関数は「存在しなければ作る、あれば使う」
+// までで、ラベル不一致による再作成は行わない (通常の API 呼び出しで予期せず
+// コンテナが落ちるのを避ける)。
+//
+// - 新規作成時の workspaceId: 引数 > getCurrentWorkspaceId(sub) > 未定の場合 /root
+// - 既存コンテナは WorkingDir / Label を問わずそのまま利用 (ユーザが明示的に
+//   activate したもの以外、勝手に作り替えない)。
 export async function ensureOpencodeSidecar(
   sub: string,
   isolated: boolean,
+  workspaceId?: string,
 ): Promise<Docker.Container> {
   const name = opencodeContainerName(sub);
+
   const existing = docker.getContainer(name);
   try {
     const info = await existing.inspect();
@@ -582,6 +599,11 @@ export async function ensureOpencodeSidecar(
     const status = (err as { statusCode?: number }).statusCode;
     if (status !== 404) throw err;
   }
+
+  // 以下は「新規作成」パス。workspaceId が指定されていればそれを、なければ
+  // 現在の current workspace を、さらに無ければ /root を cwd とする。
+  const wsId = workspaceId ?? (await getCurrentWorkspaceId(sub));
+  const workingDir = wsId ? workspaceCwd(wsId) : "/root";
 
   // image と user network / egress proxy は shell コンテナと共通で ensure。
   await ensureImageBuilt();
@@ -602,7 +624,7 @@ export async function ensureOpencodeSidecar(
     const created = await docker.createContainer({
       name,
       Image: OPENCODE_IMAGE,
-      WorkingDir: "/root",
+      WorkingDir: workingDir,
       Env: [
         "TERM=xterm-256color",
         `MYWORKSPACES_SUB=${sub}`,
@@ -626,6 +648,7 @@ export async function ensureOpencodeSidecar(
       Labels: {
         [ROLE_LABEL_KEY]: "opencode-server",
         [SUB_LABEL_KEY]: sub,
+        [OPENCODE_WORKSPACE_LABEL]: wsId ?? "",
         ...COMPOSE_LABELS,
         "com.docker.compose.service": `opencode-${sanitizeSub(sub)}`,
       },
@@ -686,6 +709,38 @@ export async function ensureOpencodeSidecar(
     }
     throw err;
   }
+}
+
+// ユーザ操作 (ワークスペース切替) のときだけ呼ぶ。既存コンテナの
+// Labels[OPENCODE_WORKSPACE_LABEL] が workspaceId と異なる場合、明示的に
+// rm → create して新 cwd で起動し直す。session.directory が変わる。
+// ensureOpencodeSidecar と違って「作り替え」を許容するのはこの関数のみ。
+export async function activateOpencodeSidecar(
+  sub: string,
+  isolated: boolean,
+  workspaceId: string,
+): Promise<Docker.Container> {
+  const name = opencodeContainerName(sub);
+  const existing = docker.getContainer(name);
+  try {
+    const info = await existing.inspect();
+    const existingWsId = info.Config?.Labels?.[OPENCODE_WORKSPACE_LABEL] ?? "";
+    if (existingWsId === workspaceId) {
+      if (!info.State.Running) {
+        await existing.start();
+        console.log(`[docker] started existing opencode sidecar: ${name}`);
+      }
+      return existing;
+    }
+    console.log(
+      `[docker] opencode sidecar workspace changing (${existingWsId || "-"} -> ${workspaceId}), recreating ${name}`,
+    );
+    await existing.remove({ force: true });
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status !== 404) throw err;
+  }
+  return ensureOpencodeSidecar(sub, isolated, workspaceId);
 }
 
 export async function removeOpencodeSidecar(sub: string): Promise<boolean> {
