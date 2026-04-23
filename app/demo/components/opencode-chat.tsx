@@ -13,15 +13,23 @@ import {
   type SessionInfo,
 } from "./use-opencode-stream";
 
-// Business パネル裏面に入る opencode チャット UI。
+// Business パネル表面に入る opencode チャット UI。
 // TUI (xterm.js の opencode) と session DB を共有する opencode serve サイドカー
 // (myworkspaces-opencode-{sub}) に HTTP/SSE で喋る。
 //
-// 最小実装:
 // - 左: セッション一覧 + 新規 / 削除
 // - 右: 選択セッションの履歴 + 入力フォーム
 // - Markdown (GFM) + KaTeX レンダリング
 // - reasoning part は折りたたみ「思考ログ」ブロック
+
+// opencode CLI が起動時に出すアスキーロゴ。ヘッダーに小さく表示して
+// 「これは opencode のチャット」と視覚的に示す。
+const OPENCODE_LOGO = [
+  "                                ▄     ",
+  "█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█",
+  "█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀",
+  "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
+].join("\n");
 
 export default function OpencodeChat() {
   const {
@@ -107,8 +115,22 @@ export default function OpencodeChat() {
 
   return (
     <div className="flex h-full w-full flex-col bg-white text-gray-900">
-      <header className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
-        <span className="font-semibold">opencode チャット</span>
+      <header className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+        <pre
+          aria-label="opencode"
+          className="select-none font-mono leading-none text-gray-700"
+          // 固定幅の ASCII ロゴ。Tailwind arbitrary value だと pixel 端数が
+          // 指定しづらいので style で微調整。4 行 × ~6.5px ≈ 26px で h-9 に収まる。
+          style={{
+            fontSize: "6.5px",
+            lineHeight: "7px",
+            letterSpacing: "0",
+            whiteSpace: "pre",
+          }}
+        >
+          {OPENCODE_LOGO}
+        </pre>
+        <span className="text-[10px] text-gray-400">チャット</span>
         <span
           className={`rounded px-1.5 py-0.5 text-[10px] ${
             state.connected
