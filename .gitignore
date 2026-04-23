@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code local state (scheduled_tasks.lock, settings.local.json 等)
+.claude/
