@@ -478,7 +478,13 @@ function InputForm({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          // IME 変換中の Enter は確定として扱い送信しない。
+          // nativeEvent.isComposing は変換候補が開いている間 true になる。
+          if (
+            e.key === "Enter" &&
+            !e.shiftKey &&
+            !e.nativeEvent.isComposing
+          ) {
             e.preventDefault();
             if (!disabled) void onSubmit();
           }
