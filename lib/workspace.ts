@@ -38,12 +38,12 @@ export function isInsideWorkspaces(p: string): boolean {
   return true;
 }
 
-function shellQuote(s: string): string {
+export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 // Tty:false の exec 出力は multiplex ストリームで返るため demuxStream で分離。
-async function execCollect(
+export async function execCollect(
   sub: string,
   cmd: string[],
   opts: { stdin?: Buffer } = {},
@@ -97,7 +97,7 @@ async function execCollect(
 
 // 1 ファイルの中身 (string / Buffer) をコンテナ内パスに書き出すヘルパ。
 // putArchive は「展開先ディレクトリ」を指すので、相対パスに dirname/basename を畳み込んで渡す。
-async function writeFileInContainer(
+export async function writeFileInContainer(
   sub: string,
   absolutePath: string,
   content: Buffer,

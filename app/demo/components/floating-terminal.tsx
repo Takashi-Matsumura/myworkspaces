@@ -20,7 +20,9 @@ const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
 // Business パネルは 表面=opencode チャット / 裏面=RAG ドキュメント。
 // Coding/Ubuntu パネルは従来どおり XtermView ベース。
 const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
-const RagDocuments = dynamic(() => import("./rag-documents"), { ssr: false });
+const BusinessBackPanel = dynamic(() => import("./business-back-panel"), {
+  ssr: false,
+});
 const OpencodeHintOverlay = dynamic(() => import("./opencode-hint-overlay"), {
   ssr: false,
 });
@@ -246,7 +248,7 @@ export default function FloatingTerminal({
                   ? "チャットに戻す"
                   : "表面に戻す"
                 : variant === "business"
-                  ? "RAG ドキュメントを開く"
+                  ? "RAG / スキルを開く"
                   : "シェルを開く"
             }
           >
@@ -356,7 +358,7 @@ export default function FloatingTerminal({
           >
             {headerBar(
               isBusiness
-                ? `${style.label} — RAG ドキュメント`
+                ? `${style.label} — RAG / スキル`
                 : `${style.label} — shell`,
             )}
             {!minimized && (
@@ -366,7 +368,7 @@ export default function FloatingTerminal({
                 }`}
               >
                 {isBusiness ? (
-                  <RagDocuments fontSize={fontSize} />
+                  <BusinessBackPanel fontSize={fontSize} />
                 ) : backNonce > 0 && session ? (
                   <XtermView
                     key={`${backNonce}-${fontSize}-back`}
