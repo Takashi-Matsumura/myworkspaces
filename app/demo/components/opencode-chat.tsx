@@ -495,7 +495,7 @@ function InputForm({
 }) {
   return (
     <form
-      className="flex items-end gap-2 border-t border-gray-200 bg-white px-3 py-2"
+      className="flex items-stretch gap-2 border-t border-gray-200 bg-white px-3 py-2"
       onSubmit={(e) => {
         e.preventDefault();
         if (!disabled) void onSubmit();
@@ -523,14 +523,13 @@ function InputForm({
             : "メッセージを入力 (Enter で送信 / Shift+Enter で改行)"
         }
         disabled={disabled}
-        className="flex-1 resize-none rounded border border-gray-300 px-2 py-1 focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
+        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
       />
       {busy && onAbort ? (
         <button
           type="button"
           onClick={onAbort}
-          className="flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 font-medium text-white hover:bg-red-500"
-          style={{ fontSize: "0.85em" }}
+          className="flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-4 font-medium text-white hover:bg-red-500"
           title="生成を停止"
         >
           <Square style={{ width: "1.1em", height: "1.1em" }} />
@@ -540,8 +539,7 @@ function InputForm({
         <button
           type="submit"
           disabled={disabled || busy}
-          className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
-          style={{ fontSize: "0.85em" }}
+          className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
         >
           <Send style={{ width: "1.1em", height: "1.1em" }} />
           送信
