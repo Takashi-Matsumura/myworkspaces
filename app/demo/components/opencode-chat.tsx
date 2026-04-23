@@ -118,28 +118,42 @@ export default function OpencodeChat({
   const { config } = state;
 
   return (
-    <div className="flex h-full w-full flex-col bg-white text-gray-900">
-      <header className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+    // root の font-size を fontSize で設定し、子は全部 em (相対) ベースで
+    // 定義する。Tailwind の text-xs / text-sm / text-[10px] は rem 固定で
+    // root の font-size を見ないため、A-/A+ 連動のために使わない。
+    <div
+      className="flex h-full w-full flex-col bg-white text-gray-900"
+      style={{ fontSize: `${fontSize}px`, lineHeight: 1.4 }}
+    >
+      <header
+        className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2"
+        style={{ fontSize: "0.85em" }}
+      >
         <span
-          className="font-mono text-base font-semibold tracking-tight text-slate-900"
+          className="font-mono font-semibold tracking-tight text-slate-900"
+          style={{ fontSize: "1.25em" }}
           aria-label="opencode"
         >
           <span className="text-slate-400">open</span>
           <span className="text-slate-900">code</span>
         </span>
-        <span className="text-[10px] text-gray-400">チャット</span>
+        <span className="text-gray-400" style={{ fontSize: "0.85em" }}>
+          チャット
+        </span>
         <span
-          className={`rounded px-1.5 py-0.5 text-[10px] ${
+          className={`rounded px-1.5 py-0.5 ${
             state.connected
               ? "bg-emerald-100 text-emerald-700"
               : "bg-gray-200 text-gray-600"
           }`}
+          style={{ fontSize: "0.85em" }}
         >
           {state.connected ? "接続中" : "未接続"}
         </span>
         {config && (
           <span
-            className="truncate text-[10px] text-gray-600"
+            className="truncate text-gray-600"
+            style={{ fontSize: "0.85em" }}
             title={`${config.providerID}/${config.modelID}`}
           >
             <span className="text-gray-400">モデル:</span>{" "}
@@ -148,10 +162,16 @@ export default function OpencodeChat({
           </span>
         )}
         {activating && (
-          <span className="text-[10px] text-gray-500">初期化中...</span>
+          <span className="text-gray-500" style={{ fontSize: "0.85em" }}>
+            初期化中...
+          </span>
         )}
         {activateError && (
-          <span className="text-[10px] text-red-600" title={activateError}>
+          <span
+            className="text-red-600"
+            style={{ fontSize: "0.85em" }}
+            title={activateError}
+          >
             初期化エラー
           </span>
         )}
@@ -161,7 +181,7 @@ export default function OpencodeChat({
           className="ml-auto rounded p-1 text-gray-500 hover:bg-gray-200"
           title="セッション一覧を再取得"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw style={{ width: "1.1em", height: "1.1em" }} />
         </button>
       </header>
 
@@ -180,7 +200,6 @@ export default function OpencodeChat({
             messages={activeId ? state.messagesBySession[activeId] ?? [] : []}
             parts={state.parts}
             busy={busy}
-            fontSize={fontSize}
           />
           <InputForm
             disabled={!activeId || sending}
@@ -191,7 +210,6 @@ export default function OpencodeChat({
             onAbort={
               activeId && busy ? () => void abortSession(activeId) : undefined
             }
-            fontSize={fontSize}
           />
         </section>
       </div>
@@ -215,13 +233,16 @@ function SessionList({
   onDelete: (id: string) => void | Promise<void>;
 }) {
   return (
-    <aside className="flex w-48 flex-none flex-col border-r border-gray-200 bg-gray-50 text-xs">
+    <aside
+      className="flex w-48 flex-none flex-col border-r border-gray-200 bg-gray-50"
+      style={{ fontSize: "0.85em" }}
+    >
       <button
         type="button"
         onClick={() => void onNew()}
         className="flex items-center justify-center gap-1 border-b border-gray-200 bg-emerald-50 py-2 font-medium text-emerald-700 hover:bg-emerald-100"
       >
-        <Plus className="h-3.5 w-3.5" />
+        <Plus style={{ width: "1.1em", height: "1.1em" }} />
         新規セッション
       </button>
       <ul className="flex-1 overflow-y-auto">
@@ -247,7 +268,10 @@ function SessionList({
                   <div className="truncate font-medium">
                     {s.title || "(無題)"}
                   </div>
-                  <div className="truncate text-[10px] text-gray-500">
+                  <div
+                    className="truncate text-gray-500"
+                    style={{ fontSize: "0.85em" }}
+                  >
                     {busy ? "● 応答中" : s.directory ?? ""}
                   </div>
                 </button>
@@ -257,7 +281,10 @@ function SessionList({
                   className="opacity-0 transition-opacity group-hover:opacity-100"
                   title="削除"
                 >
-                  <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-600" />
+                  <Trash2
+                    className="text-gray-400 hover:text-red-600"
+                    style={{ width: "1.1em", height: "1.1em" }}
+                  />
                 </button>
               </li>
             );
@@ -273,13 +300,11 @@ function MessageView({
   messages,
   parts,
   busy,
-  fontSize,
 }: {
   sessionId: string | null;
   messages: { id: string; role: string; partIds: string[] }[];
   parts: Record<string, PartInfo>;
   busy: boolean;
-  fontSize: number;
 }) {
   // 自動スクロール: 新しい delta で下端に追従
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -323,7 +348,7 @@ function MessageView({
 
   if (!sessionId) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-gray-500">
+      <div className="flex flex-1 items-center justify-center px-6 text-center text-gray-500">
         左側からセッションを選ぶか「新規セッション」を押してください。
         <br />
         既存の Coding/Business パネル TUI で始めた会話もここから続きを書けます。
@@ -332,13 +357,10 @@ function MessageView({
   }
 
   return (
+    // fontSize は root で指定済み (継承)。ここでは em ベースのみ。
     <div
       ref={scrollRef}
-      // text-sm は fontSize prop で上書き。子要素の text-[10px] などは絶対値
-      // なので固定ラベル (役割名) はサイズ据え置き、本文・Markdown 部分は
-      // font-size を継承して A-/A+ に連動する。
       className="flex-1 space-y-4 overflow-y-auto px-4 py-3"
-      style={{ fontSize: `${fontSize}px`, lineHeight: 1.5 }}
     >
       {groups.map((g) => (
         <div
@@ -349,7 +371,10 @@ function MessageView({
               : "border border-emerald-200 bg-emerald-50/40"
           }`}
         >
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          <div
+            className="mb-1 font-semibold uppercase tracking-wide text-gray-500"
+            style={{ fontSize: "0.7em" }}
+          >
             {g.role === "user" ? "あなた" : "opencode"}
           </div>
           {g.partIds.map(({ pid, messageId }) => {
@@ -360,7 +385,9 @@ function MessageView({
         </div>
       ))}
       {busy && (
-        <div className="text-xs text-emerald-700">● 応答を生成中...</div>
+        <div className="text-emerald-700" style={{ fontSize: "0.9em" }}>
+          ● 応答を生成中...
+        </div>
       )}
     </div>
   );
@@ -369,19 +396,30 @@ function MessageView({
 function MessagePart({ part }: { part: PartInfo }) {
   if (part.type === "reasoning") {
     return (
-      <details className="mb-2 rounded border border-gray-200 bg-white/70 text-xs">
+      <details
+        className="mb-2 rounded border border-gray-200 bg-white/70"
+        style={{ fontSize: "0.9em" }}
+      >
         <summary className="cursor-pointer select-none px-2 py-1 text-gray-500 hover:bg-gray-100">
           思考ログ ({part.text.length} 文字)
         </summary>
-        <pre className="whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-relaxed text-gray-700">
+        <pre
+          className="whitespace-pre-wrap break-words px-3 py-2 font-mono leading-relaxed text-gray-700"
+          style={{ fontSize: "0.9em" }}
+        >
           {part.text}
         </pre>
       </details>
     );
   }
   if (part.type === "text") {
+    // prose は rem 固定 (0.875rem 等) を当てるので inherit で上書きして
+    // 親からの em ベース (A-/A+) に連動させる。
     return (
-      <div className="prose prose-sm max-w-none">
+      <div
+        className="prose max-w-none"
+        style={{ fontSize: "inherit", lineHeight: 1.55 }}
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex]}
@@ -402,7 +440,6 @@ function InputForm({
   onChange,
   onSubmit,
   onAbort,
-  fontSize,
 }: {
   disabled: boolean;
   busy: boolean;
@@ -410,7 +447,6 @@ function InputForm({
   onChange: (v: string) => void;
   onSubmit: () => void | Promise<void>;
   onAbort?: () => void;
-  fontSize: number;
 }) {
   return (
     <form
@@ -437,25 +473,26 @@ function InputForm({
         }
         disabled={disabled}
         className="flex-1 resize-none rounded border border-gray-300 px-2 py-1 focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
-        style={{ fontSize: `${fontSize}px`, lineHeight: 1.4 }}
       />
       {busy && onAbort ? (
         <button
           type="button"
           onClick={onAbort}
-          className="flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+          className="flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 font-medium text-white hover:bg-red-500"
+          style={{ fontSize: "0.85em" }}
           title="生成を停止"
         >
-          <Square className="h-3.5 w-3.5" />
+          <Square style={{ width: "1.1em", height: "1.1em" }} />
           停止
         </button>
       ) : (
         <button
           type="submit"
           disabled={disabled || busy}
-          className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
+          className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
+          style={{ fontSize: "0.85em" }}
         >
-          <Send className="h-3.5 w-3.5" />
+          <Send style={{ width: "1.1em", height: "1.1em" }} />
           送信
         </button>
       )}
