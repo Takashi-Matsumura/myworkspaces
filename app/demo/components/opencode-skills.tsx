@@ -236,11 +236,17 @@ export default function OpencodeSkills({
 
       <section className="flex flex-1 flex-col overflow-hidden">
         {!selected ? (
-          <div className="flex flex-1 items-center justify-center px-6 text-center text-gray-400">
-            左の一覧からスキルを選ぶか「新規スキル」で作成してください。
-            <br />
-            ユーザー全体で使える SKILL.md は{" "}
-            <code className="px-1">~/.config/opencode/skills/</code> に保存されます。
+          <div className="flex flex-1 items-center justify-center px-6 text-gray-400">
+            <div className="max-w-md text-center leading-relaxed">
+              <p>左の一覧からスキルを選ぶか「新規スキル」で作成してください。</p>
+              <p className="mt-2">
+                ユーザー全体で使える SKILL.md は{" "}
+                <code className="rounded bg-gray-100 px-1 text-gray-600">
+                  ~/.config/opencode/skills/
+                </code>{" "}
+                に保存されます。
+              </p>
+            </div>
           </div>
         ) : (
           <form
