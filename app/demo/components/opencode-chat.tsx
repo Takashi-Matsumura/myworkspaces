@@ -6,7 +6,15 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { Plus, Trash2, Send, RefreshCw, Square } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Send,
+  RefreshCw,
+  Square,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import {
   useOpencodeStream,
   type PartInfo,
@@ -47,6 +55,7 @@ export default function OpencodeChat({
   const [sending, setSending] = useState(false);
   const [activating, setActivating] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
+  const [sessionListCollapsed, setSessionListCollapsed] = useState(false);
 
   // 初回: current workspace を activate してサイドカーの cwd をそこに合わせ、
   // その後セッション一覧を取得する。
@@ -146,6 +155,23 @@ export default function OpencodeChat({
         className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2"
         style={{ fontSize: "0.85em" }}
       >
+        <button
+          type="button"
+          onClick={() => setSessionListCollapsed((v) => !v)}
+          className="rounded p-1 text-gray-500 hover:bg-gray-200"
+          title={
+            sessionListCollapsed ? "セッション一覧を展開" : "セッション一覧を折りたたむ"
+          }
+          aria-label={
+            sessionListCollapsed ? "セッション一覧を展開" : "セッション一覧を折りたたむ"
+          }
+        >
+          {sessionListCollapsed ? (
+            <PanelLeftOpen style={{ width: "1.1em", height: "1.1em" }} />
+          ) : (
+            <PanelLeftClose style={{ width: "1.1em", height: "1.1em" }} />
+          )}
+        </button>
         <span
           className="font-mono font-semibold tracking-tight text-slate-900"
           style={{ fontSize: "1.25em" }}
@@ -203,14 +229,16 @@ export default function OpencodeChat({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <SessionList
-          sessions={state.sessions}
-          activeId={activeId}
-          busyMap={state.busyBySession}
-          onSelect={setActiveId}
-          onNew={onNewSession}
-          onDelete={onDeleteSession}
-        />
+        {!sessionListCollapsed && (
+          <SessionList
+            sessions={state.sessions}
+            activeId={activeId}
+            busyMap={state.busyBySession}
+            onSelect={setActiveId}
+            onNew={onNewSession}
+            onDelete={onDeleteSession}
+          />
+        )}
         <section className="flex flex-1 flex-col overflow-hidden">
           <MessageView
             sessionId={activeId}
