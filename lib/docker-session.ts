@@ -123,6 +123,7 @@ export async function ensureImageBuilt(): Promise<void> {
           "myworkspaces-prompt.sh",
           "templates/describe_image.ts",
           "templates/read_excel.ts",
+          "templates/language-rules.md",
           "templates/vision-rules.md",
           "templates/business-rules.md",
           "templates/opencode.json",
@@ -572,6 +573,12 @@ export async function ensureContainer(
   // 新規作成時のみ隔離判定を行う。明示指定が無ければ DB から取る。
   // 既存コンテナ利用時は DB 値と違っていても干渉しない (切替は API 経由で削除→再作成)。
   const isolated = net?.isolated ?? (await getUserNetworkIsolation(sub));
+
+  // ここに来るのは「コンテナが存在しない」新規作成パスのみ。image が未ビルド
+  // (例: `docker rmi` 直後) でも createContainer で 404 にならないよう、必ず
+  // ensureImageBuilt を通す。既存コンテナの start パスでは image 不要なので通さない。
+  await ensureImageBuilt();
+
   if (isolated) {
     await ensureIsolatedNetwork();
     await ensureEgressProxyContainer();
