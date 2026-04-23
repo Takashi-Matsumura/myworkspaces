@@ -21,10 +21,15 @@ export type UserSettings = {
   appearance: AppearanceSettings;
 };
 
+// 既定の endpoint は RAG サイドカー (per-user container、同じ user-network 上で
+// "rag-sidecar" alias で解決される)。サイドカーが OpenAI 互換 proxy として動作し、
+// 内部で検索→文脈注入→ホストの llama-server (:8080) に中継する。
+// サイドカーを経由したくない場合は、Settings → OpenCode で endpoint を
+// "http://host.docker.internal:8080" に上書きすれば従来の直結に戻せる。
 const DEFAULT_SETTINGS: UserSettings = {
   opencode: {
     provider: "llama-server",
-    endpoint: "http://host.docker.internal:8080",
+    endpoint: "http://rag-sidecar:9090",
     model: "gemma-4-e4b-it-Q4_K_M.gguf",
     apiKey: "",
   },

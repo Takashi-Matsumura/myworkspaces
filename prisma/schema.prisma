@@ -13,15 +13,16 @@ datasource db {
 }
 
 model User {
-  id              String      @id @default(cuid())
-  username        String      @unique
+  id              String        @id @default(cuid())
+  username        String        @unique
   passwordHash    String
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  networkIsolated Boolean     @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  networkIsolated Boolean       @default(false)
   workspaces      Workspace[]
   sessions        Session[]
   whiteboard      Whiteboard?
+  ragDocuments    RagDocument[]
 }
 
 model Session {
@@ -56,4 +57,20 @@ model Whiteboard {
   appState  Json
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// RAG に取り込まれたドキュメントのメタデータ。実データ (チャンク・埋め込み) は
+// ユーザ固有の RAG サイドカー (myworkspaces-rag-{sub}) 内の Qdrant に格納される。
+// このテーブルは Web UI の一覧表示と削除操作のためのハンドルに過ぎない。
+// id は Qdrant payload 側の doc_id と同値 (1 ドキュメント = 複数チャンク)。
+model RagDocument {
+  id         String   @id @default(cuid())
+  userId     String
+  filename   String
+  bytes      Int
+  chunkCount Int
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
