@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Wand2 } from "lucide-react";
+import { FileText, HelpCircle, Wand2 } from "lucide-react";
 import dynamic from "next/dynamic";
 
 // 裏面の中身は ssr:false で遅延ロードする。xterm / ファイル API を参照する
@@ -10,12 +10,14 @@ const RagDocuments = dynamic(() => import("./rag-documents"), { ssr: false });
 const OpencodeSkills = dynamic(() => import("./opencode-skills"), {
   ssr: false,
 });
+const BusinessHelp = dynamic(() => import("./business-help"), { ssr: false });
 
-type Tab = "rag" | "skills";
+type Tab = "rag" | "skills" | "help";
 
 // Business パネル裏面のタブ切替ラッパー。
 // - rag: 既存の RAG ドキュメント管理
 // - skills: ユーザー全体スキル (SKILL.md) の編集
+// - help: Business チャットの使い方・想定シーン
 export default function BusinessBackPanel({
   fontSize = 13,
 }: {
@@ -41,12 +43,20 @@ export default function BusinessBackPanel({
           icon={<Wand2 style={{ width: "1em", height: "1em" }} />}
           label="スキル"
         />
+        <TabButton
+          active={tab === "help"}
+          onClick={() => setTab("help")}
+          icon={<HelpCircle style={{ width: "1em", height: "1em" }} />}
+          label="ヘルプ"
+        />
       </div>
       <div className="flex-1 overflow-hidden">
         {tab === "rag" ? (
           <RagDocuments fontSize={fontSize} />
-        ) : (
+        ) : tab === "skills" ? (
           <OpencodeSkills fontSize={fontSize} />
+        ) : (
+          <BusinessHelp fontSize={fontSize} />
         )}
       </div>
     </div>
