@@ -35,6 +35,17 @@ export async function listWorkspaces(sub: string): Promise<WorkspaceEntry[]> {
   return rows.map(toEntry);
 }
 
+// 「最後に開いたワークスペース」を current workspace として扱う。opencode
+// サイドカーの WorkingDir 決定などに使う。未作成なら null。
+export async function getCurrentWorkspaceId(sub: string): Promise<string | null> {
+  const row = await prisma.workspace.findFirst({
+    where: { userId: sub },
+    orderBy: { lastOpenedAt: "desc" },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
 export async function findWorkspaceById(
   sub: string,
   id: string,
