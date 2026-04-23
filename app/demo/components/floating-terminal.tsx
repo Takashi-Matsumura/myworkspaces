@@ -248,7 +248,7 @@ export default function FloatingTerminal({
                   ? "チャットに戻す"
                   : "表面に戻す"
                 : variant === "business"
-                  ? "RAG / スキルを開く"
+                  ? "RAG / スキル / ヘルプを開く"
                   : "シェルを開く"
             }
           >
@@ -358,7 +358,7 @@ export default function FloatingTerminal({
           >
             {headerBar(
               isBusiness
-                ? `${style.label} — RAG / スキル`
+                ? `${style.label} — RAG / スキル / ヘルプ`
                 : `${style.label} — shell`,
             )}
             {!minimized && (
