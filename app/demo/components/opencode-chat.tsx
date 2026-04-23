@@ -88,6 +88,23 @@ export default function OpencodeChat({
     if (activeId) void loadMessages(activeId);
   }, [activeId, loadMessages]);
 
+  // Workspace パネルから ws が切り替わったら、新 ws の opencode.json と
+  // session 一覧を取り直し、旧 ws の session を選択したまま放置しない。
+  // floating-workspace.tsx の openWorkspace が activate 成功時に dispatch する。
+  useEffect(() => {
+    const handler = () => {
+      setActiveId(null);
+      void (async () => {
+        await loadConfig();
+        await refreshSessions();
+      })();
+    };
+    window.addEventListener("myworkspaces:opencode-activated", handler);
+    return () => {
+      window.removeEventListener("myworkspaces:opencode-activated", handler);
+    };
+  }, [loadConfig, refreshSessions]);
+
   // 送信
   const onSend = useCallback(async () => {
     const text = input.trim();
