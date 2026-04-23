@@ -109,6 +109,7 @@ ENV NODE_PATH=/usr/lib/node_modules
 RUN mkdir -p /opt/myworkspaces/templates/.opencode/tools
 COPY templates/describe_image.ts /opt/myworkspaces/templates/.opencode/tools/
 COPY templates/read_excel.ts /opt/myworkspaces/templates/.opencode/tools/
+COPY templates/language-rules.md /opt/myworkspaces/templates/
 COPY templates/vision-rules.md /opt/myworkspaces/templates/
 COPY templates/business-rules.md /opt/myworkspaces/templates/
 COPY templates/opencode.json /opt/myworkspaces/templates/

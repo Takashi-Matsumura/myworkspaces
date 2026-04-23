@@ -318,9 +318,20 @@ async def chat_completions(request: Request) -> Response:
         )
 
     async def event_stream():
+        # httpx はデフォルトで Accept-Encoding: gzip, deflate, br, zstd を送る。
+        # llama-server が SSE を圧縮で返すと aiter_raw() は未展開バイトを下流に
+        # 流してしまい、opencode の SSE parser が壊れて reasoning_content delta が
+        # 欠落する (Thinking が表示されない症状)。圧縮を明示的に抑止し、保険として
+        # 受信側も decode 済みの aiter_bytes() を使う。
+        req_headers = {
+            "accept-encoding": "identity",
+            "accept": "text/event-stream",
+        }
         async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", upstream_url, json=body) as resp:
-                async for chunk in resp.aiter_raw():
+            async with client.stream(
+                "POST", upstream_url, json=body, headers=req_headers,
+            ) as resp:
+                async for chunk in resp.aiter_bytes():
                     if chunk:
                         yield chunk
 

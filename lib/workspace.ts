@@ -120,8 +120,8 @@ async function writeFileInContainer(
 }
 
 // ワークスペース作成: コンテナ内 /root/workspaces/{id}/ を mkdir し、
-// テンプレート (.opencode/tools + vision-rules.md + business-rules.md) をコピーし、
-// opencode.json は ユーザー設定から生成して putArchive で書き込む。
+// テンプレート (.opencode/tools + language-rules.md + vision-rules.md + business-rules.md)
+// をコピーし、opencode.json は ユーザー設定から生成して putArchive で書き込む。
 export async function createWorkspaceDirectory(
   sub: string,
   id: string,
@@ -132,6 +132,7 @@ export async function createWorkspaceDirectory(
     `mkdir -p ${cwd}/.opencode/tools`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/describe_image.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_excel.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
+    `cp -n ${TEMPLATE_DIR}/language-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/vision-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/business-rules.md ${cwd}/ 2>/dev/null || true`,
   ].join(" && ");
