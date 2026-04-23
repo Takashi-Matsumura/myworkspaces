@@ -85,8 +85,19 @@ RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VER
     rm -rf /root/.opencode
 
 # read_excel.ts が require する xlsx をグローバルに入れておく。
-# （ワークスペースごとに npm install する手間を省くため）
+# (ワークスペースごとに npm install する手間を省くため)
 RUN npm install -g xlsx
+
+# read_pdf.ts は child_process 経由で Python + pypdf を呼ぶ。
+# Node.js 側の PDF パーサ (pdfjs-dist v5 / pdf-parse v2) は CID フォント
+# (reportlab の HeiseiKakuGo など) の ToUnicode CMap を読み損ねて抽出テキストが
+# 空になる事例があるため、ToUnicode を素直に扱える pypdf を外部プロセスで使う。
+# python3 はベースに既に入っており、pip だけ追加する。
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3-pip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install --break-system-packages --no-cache-dir pypdf
 
 # Claude Code CLI。Bash パネルから `claude` で起動する。
 # npm global install で /usr/lib/node_modules/@anthropic-ai/claude-code/ に落ち、
@@ -109,9 +120,11 @@ ENV NODE_PATH=/usr/lib/node_modules
 RUN mkdir -p /opt/myworkspaces/templates/.opencode/tools
 COPY templates/describe_image.ts /opt/myworkspaces/templates/.opencode/tools/
 COPY templates/read_excel.ts /opt/myworkspaces/templates/.opencode/tools/
+COPY templates/read_pdf.ts /opt/myworkspaces/templates/.opencode/tools/
 COPY templates/language-rules.md /opt/myworkspaces/templates/
 COPY templates/vision-rules.md /opt/myworkspaces/templates/
 COPY templates/business-rules.md /opt/myworkspaces/templates/
+COPY templates/pdf-rules.md /opt/myworkspaces/templates/
 COPY templates/opencode.json /opt/myworkspaces/templates/
 
 WORKDIR /root

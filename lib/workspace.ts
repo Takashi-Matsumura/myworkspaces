@@ -132,9 +132,11 @@ export async function createWorkspaceDirectory(
     `mkdir -p ${cwd}/.opencode/tools`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/describe_image.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_excel.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
+    `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_pdf.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/language-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/vision-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/business-rules.md ${cwd}/ 2>/dev/null || true`,
+    `cp -n ${TEMPLATE_DIR}/pdf-rules.md ${cwd}/ 2>/dev/null || true`,
   ].join(" && ");
 
   const res = await execCollect(sub, ["/bin/bash", "-c", script]);
