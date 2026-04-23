@@ -10,6 +10,7 @@ import { X, Minus, Maximize2, ArrowUpDown } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
+const RagDocuments = dynamic(() => import("./rag-documents"), { ssr: false });
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -222,7 +223,13 @@ export default function FloatingTerminal({
             type="button"
             onClick={handleFlip}
             className="ml-1 rounded p-0.5 text-white hover:bg-white/10"
-            title={flipped ? "表面に戻す" : "シェルを開く"}
+            title={
+              flipped
+                ? "表面に戻す"
+                : variant === "business"
+                  ? "RAG ドキュメントを開く"
+                  : "シェルを開く"
+            }
           >
             <ArrowUpDown className="h-3.5 w-3.5 rotate-90" />
           </button>
@@ -300,7 +307,8 @@ export default function FloatingTerminal({
           )}
         </div>
 
-        {/* Back (ubuntu variant 以外) */}
+        {/* Back (ubuntu variant 以外)。
+            Business 裏面は RAG ドキュメント、Coding 裏面は shell (bash)。 */}
         {backAvailable && (
           <div
             className={`flex flex-col rounded-lg shadow-2xl backdrop-blur ${style.panelBorder}`}
@@ -312,13 +320,20 @@ export default function FloatingTerminal({
               backgroundColor: style.panelBg,
             }}
           >
-            {headerBar(`${style.label} — shell`)}
+            {headerBar(
+              variant === "business"
+                ? `${style.label} — RAG ドキュメント`
+                : `${style.label} — shell`,
+            )}
             {!minimized && (
               <div
-                className="relative flex-1 overflow-hidden rounded-b-lg bg-[#0b0b0f]"
-                style={style.filter ? { filter: style.filter } : undefined}
+                className={`relative flex-1 overflow-hidden rounded-b-lg ${
+                  variant === "business" ? "bg-white" : "bg-[#0b0b0f]"
+                }`}
               >
-                {backNonce > 0 && session ? (
+                {variant === "business" ? (
+                  <RagDocuments />
+                ) : backNonce > 0 && session ? (
                   <XtermView
                     key={`${backNonce}-${fontSize}-back`}
                     cwd={session.cwd}
@@ -336,7 +351,10 @@ export default function FloatingTerminal({
                   onPointerMove={onResizePointerMove}
                   onPointerUp={onResizePointerUp}
                   style={{
-                    background: "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)",
+                    background:
+                      variant === "business"
+                        ? "linear-gradient(135deg, transparent 50%, rgba(33,115,70,0.3) 50%)"
+                        : "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)",
                   }}
                 />
               </div>
