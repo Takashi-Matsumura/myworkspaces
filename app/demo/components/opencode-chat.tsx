@@ -22,20 +22,20 @@ import {
 // - Markdown (GFM) + KaTeX レンダリング
 // - reasoning part は折りたたみ「思考ログ」ブロック
 
-// opencode CLI が起動時に出すアスキーロゴ。ヘッダーに小さく表示して
-// 「これは opencode のチャット」と視覚的に示す。
-const OPENCODE_LOGO = [
-  "                                ▄     ",
-  "█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█",
-  "█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀",
-  "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
-].join("\n");
 
-export default function OpencodeChat() {
+export default function OpencodeChat({
+  fontSize = 13,
+}: {
+  // パネル側の A- / A+ と連動させるためのメッセージ本文のフォントサイズ。
+  // ヘッダーやキャプション類は固定サイズ (可変にすると詰まりやすいため)、
+  // 会話本文 (MessageView) と入力欄だけに反映する。
+  fontSize?: number;
+}) {
   const {
     state,
     refreshSessions,
     loadMessages,
+    loadConfig,
     createSession,
     deleteSession,
     sendPrompt,
@@ -68,7 +68,10 @@ export default function OpencodeChat() {
           });
           if (!a.ok) throw new Error(`activate ${a.status}`);
         }
-        if (!cancelled) await refreshSessions();
+        if (!cancelled) {
+          await refreshSessions();
+          await loadConfig();
+        }
       } catch (err) {
         if (!cancelled) setActivateError(String(err));
       } finally {
@@ -78,7 +81,7 @@ export default function OpencodeChat() {
     return () => {
       cancelled = true;
     };
-  }, [refreshSessions]);
+  }, [refreshSessions, loadConfig]);
 
   // 選択セッションが決まったら履歴をロード
   useEffect(() => {
@@ -112,24 +115,18 @@ export default function OpencodeChat() {
   );
 
   const busy = activeId ? state.busyBySession[activeId] === true : false;
+  const { config } = state;
 
   return (
     <div className="flex h-full w-full flex-col bg-white text-gray-900">
       <header className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
-        <pre
+        <span
+          className="font-mono text-base font-semibold tracking-tight text-slate-900"
           aria-label="opencode"
-          className="select-none font-mono leading-none text-gray-700"
-          // 固定幅の ASCII ロゴ。Tailwind arbitrary value だと pixel 端数が
-          // 指定しづらいので style で微調整。4 行 × ~6.5px ≈ 26px で h-9 に収まる。
-          style={{
-            fontSize: "6.5px",
-            lineHeight: "7px",
-            letterSpacing: "0",
-            whiteSpace: "pre",
-          }}
         >
-          {OPENCODE_LOGO}
-        </pre>
+          <span className="text-slate-400">open</span>
+          <span className="text-slate-900">code</span>
+        </span>
         <span className="text-[10px] text-gray-400">チャット</span>
         <span
           className={`rounded px-1.5 py-0.5 text-[10px] ${
@@ -140,6 +137,16 @@ export default function OpencodeChat() {
         >
           {state.connected ? "接続中" : "未接続"}
         </span>
+        {config && (
+          <span
+            className="truncate text-[10px] text-gray-600"
+            title={`${config.providerID}/${config.modelID}`}
+          >
+            <span className="text-gray-400">モデル:</span>{" "}
+            <span className="font-medium text-gray-800">{config.modelName}</span>
+            <span className="text-gray-400"> · {config.providerName}</span>
+          </span>
+        )}
         {activating && (
           <span className="text-[10px] text-gray-500">初期化中...</span>
         )}
@@ -173,6 +180,7 @@ export default function OpencodeChat() {
             messages={activeId ? state.messagesBySession[activeId] ?? [] : []}
             parts={state.parts}
             busy={busy}
+            fontSize={fontSize}
           />
           <InputForm
             disabled={!activeId || sending}
@@ -183,6 +191,7 @@ export default function OpencodeChat() {
             onAbort={
               activeId && busy ? () => void abortSession(activeId) : undefined
             }
+            fontSize={fontSize}
           />
         </section>
       </div>
@@ -264,11 +273,13 @@ function MessageView({
   messages,
   parts,
   busy,
+  fontSize,
 }: {
   sessionId: string | null;
   messages: { id: string; role: string; partIds: string[] }[];
   parts: Record<string, PartInfo>;
   busy: boolean;
+  fontSize: number;
 }) {
   // 自動スクロール: 新しい delta で下端に追従
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -323,7 +334,11 @@ function MessageView({
   return (
     <div
       ref={scrollRef}
-      className="flex-1 space-y-4 overflow-y-auto px-4 py-3 text-sm"
+      // text-sm は fontSize prop で上書き。子要素の text-[10px] などは絶対値
+      // なので固定ラベル (役割名) はサイズ据え置き、本文・Markdown 部分は
+      // font-size を継承して A-/A+ に連動する。
+      className="flex-1 space-y-4 overflow-y-auto px-4 py-3"
+      style={{ fontSize: `${fontSize}px`, lineHeight: 1.5 }}
     >
       {groups.map((g) => (
         <div
@@ -387,6 +402,7 @@ function InputForm({
   onChange,
   onSubmit,
   onAbort,
+  fontSize,
 }: {
   disabled: boolean;
   busy: boolean;
@@ -394,6 +410,7 @@ function InputForm({
   onChange: (v: string) => void;
   onSubmit: () => void | Promise<void>;
   onAbort?: () => void;
+  fontSize: number;
 }) {
   return (
     <form
@@ -419,7 +436,8 @@ function InputForm({
             : "メッセージを入力 (Enter で送信 / Shift+Enter で改行)"
         }
         disabled={disabled}
-        className="flex-1 resize-none rounded border border-gray-300 px-2 py-1 text-sm focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
+        className="flex-1 resize-none rounded border border-gray-300 px-2 py-1 focus:border-emerald-500 focus:outline-none disabled:bg-gray-50"
+        style={{ fontSize: `${fontSize}px`, lineHeight: 1.4 }}
       />
       {busy && onAbort ? (
         <button

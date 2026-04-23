@@ -301,7 +301,7 @@ export default function FloatingTerminal({
               }
             >
               {isBusiness ? (
-                <OpencodeChat />
+                <OpencodeChat fontSize={fontSize} />
               ) : session ? (
                 <XtermView
                   key={`${session.nonce}-${fontSize}-front`}
