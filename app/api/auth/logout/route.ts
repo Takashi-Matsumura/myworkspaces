@@ -6,7 +6,11 @@ import {
   resolveSessionCookie,
   SESSION_COOKIE,
 } from "@/lib/auth";
-import { shutdownSessionsForSub, stopContainer } from "@/lib/docker-session";
+import {
+  shutdownSessionsForSub,
+  stopContainer,
+  stopRagSidecar,
+} from "@/lib/docker-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +24,12 @@ export async function POST(request: NextRequest) {
     if (user) {
       try {
         shutdownSessionsForSub(user.id);
-        await stopContainer(user.id);
+        // shell と RAG サイドカーはライフサイクルを揃える。
+        // 片方だけ残すと「ログアウト済みなのに RAG コンテナは動いている」状態になる。
+        await Promise.all([
+          stopContainer(user.id),
+          stopRagSidecar(user.id),
+        ]);
       } catch (err) {
         console.warn("[auth/logout] container stop failed", err);
       }

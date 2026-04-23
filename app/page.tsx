@@ -9,17 +9,24 @@ import {
   Folder,
   CodeXml,
   TerminalSquare,
+  Database,
 } from "lucide-react";
 import type { View, CanvasActions } from "./demo/components/whiteboard-canvas";
 import type { Workspace } from "./demo/components/floating-workspace";
 import type { TerminalSession } from "./demo/components/floating-terminal";
 import { AccountBadge } from "./demo/components/account-badge";
 
-type PanelId = "workspace" | "coding" | "business" | "ubuntu";
+type PanelId = "workspace" | "coding" | "business" | "ubuntu" | "rag";
 
 // デフォルトの重なり順。後ろほど手前に来る (末尾が最前面)。
-// 起動直後はターミナルをワークスペースより上に置く。
-const INITIAL_PANEL_ORDER: PanelId[] = ["workspace", "ubuntu", "business", "coding"];
+// 起動直後はターミナルをワークスペースより上に置く。RAG は最前面で目立たせる。
+const INITIAL_PANEL_ORDER: PanelId[] = [
+  "workspace",
+  "ubuntu",
+  "business",
+  "coding",
+  "rag",
+];
 
 const WhiteboardCanvas = dynamic(
   () => import("./demo/components/whiteboard-canvas"),
@@ -33,6 +40,10 @@ const FloatingWorkspace = dynamic(
   () => import("./demo/components/floating-workspace"),
   { ssr: false },
 );
+const FloatingRag = dynamic(
+  () => import("./demo/components/floating-rag"),
+  { ssr: false },
+);
 
 export default function Home() {
   const canvasRef = useRef<CanvasActions | null>(null);
@@ -41,6 +52,7 @@ export default function Home() {
   const [codingSession, setCodingSession] = useState<TerminalSession | null>(null);
   const [businessSession, setBusinessSession] = useState<TerminalSession | null>(null);
   const [ubuntuSession, setUbuntuSession] = useState<TerminalSession | null>(null);
+  const [ragOpen, setRagOpen] = useState(false);
   const [drawOver, setDrawOver] = useState(false);
   // Toolbar は Draw Over の時だけ出す (独立トグルは廃止)
   const showToolbar = drawOver;
@@ -85,6 +97,10 @@ export default function Home() {
     if (!workspace) return;
     setUbuntuSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
     bringToFront("ubuntu");
+  };
+  const startRag = () => {
+    setRagOpen(true);
+    bringToFront("rag");
   };
 
   // 設定パネルのコンテナタブから呼ばれる。confirm は呼び出し側で出すため、ここでは出さない。
@@ -166,6 +182,14 @@ export default function Home() {
           onFocus={() => bringToFront("ubuntu")}
         />
       )}
+      {ragOpen && (
+        <FloatingRag
+          view={view}
+          onStop={() => setRagOpen(false)}
+          z={zFor("rag")}
+          onFocus={() => bringToFront("rag")}
+        />
+      )}
       <footer className="fixed right-0 bottom-0 left-0 z-[60] flex h-8 items-center justify-center gap-1 border-t border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="absolute inset-y-0 left-2 flex items-center gap-2">
           <AccountBadge />
@@ -210,6 +234,15 @@ export default function Home() {
               <TerminalSquare className="h-3 w-3" />
             </PanelSwitcherButton>
           )}
+          <PanelSwitcherButton
+            active={frontPanel === "rag" && ragOpen}
+            onClick={() => (ragOpen ? bringToFront("rag") : startRag())}
+            label="RAG"
+            title="RAG ドキュメントパネルを開く"
+            accent="#6366f1"
+          >
+            <Database className="h-3 w-3" />
+          </PanelSwitcherButton>
         </div>
         <button
           type="button"

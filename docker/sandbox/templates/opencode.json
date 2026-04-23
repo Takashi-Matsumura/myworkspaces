@@ -6,7 +6,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "llama.cpp (local)",
       "options": {
-        "baseURL": "http://host.docker.internal:8080/v1"
+        "baseURL": "http://rag-sidecar:9090/v1"
       },
       "models": {
         "gemma-4-e4b-it-Q4_K_M.gguf": {
