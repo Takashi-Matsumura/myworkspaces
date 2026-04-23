@@ -121,6 +121,7 @@ export default function OpencodeSkills({
       setDirty(false);
       setCreating(false);
       // 作成直後は selected の name をそのまま維持 (編集モードに移行)
+      window.dispatchEvent(new CustomEvent("myworkspaces:skills-changed"));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -136,6 +137,7 @@ export default function OpencodeSkills({
         await apiDelete(name);
         if (selected?.name === name) cancelEdit();
         await refresh();
+        window.dispatchEvent(new CustomEvent("myworkspaces:skills-changed"));
       } catch (err) {
         setError((err as Error).message);
       }
