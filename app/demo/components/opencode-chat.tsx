@@ -686,22 +686,7 @@ function ChatThread({
 
 function MessagePart({ part }: { part: PartInfo }) {
   if (part.type === "reasoning") {
-    return (
-      <details
-        className="mb-2 rounded border border-gray-200 bg-white/70"
-        style={{ fontSize: "0.9em" }}
-      >
-        <summary className="cursor-pointer select-none px-2 py-1 text-gray-500 hover:bg-gray-100">
-          思考ログ ({part.text.length} 文字)
-        </summary>
-        <pre
-          className="whitespace-pre-wrap break-words px-3 py-2 font-mono leading-relaxed text-gray-700"
-          style={{ fontSize: "0.9em" }}
-        >
-          {part.text}
-        </pre>
-      </details>
-    );
+    return <ReasoningPart part={part} />;
   }
   if (part.type === "text") {
     // prose は rem 固定 (0.875rem 等) を当てるので inherit で上書きして
@@ -722,6 +707,155 @@ function MessagePart({ part }: { part: PartInfo }) {
   }
   // step-start / step-finish / tool などは今のところ非表示
   return null;
+}
+
+// 英語の思考ログを折りたたみ + 日本語翻訳タブで表示する。
+// 翻訳は /api/opencode/translate の text/plain ストリームを逐次連結する。
+// 1 回翻訳した結果はキャッシュし、再度「日本語」タブを押しても再取得しない。
+// 思考ログがストリーム途中の場合は「再翻訳」で最新版に更新できる。
+function ReasoningPart({ part }: { part: PartInfo }) {
+  const [tab, setTab] = useState<"source" | "ja">("source");
+  const [translation, setTranslation] = useState("");
+  const [translating, setTranslating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [translatedFromLen, setTranslatedFromLen] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // アンマウント時に stream を畳む。
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const runTranslate = useCallback(async () => {
+    const text = part.text;
+    if (!text.trim()) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setTranslating(true);
+    setError(null);
+    setTranslation("");
+    try {
+      const resp = await fetch("/api/opencode/translate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: ac.signal,
+      });
+      if (!resp.ok || !resp.body) {
+        setError(`翻訳に失敗しました (${resp.status})`);
+        setTranslating(false);
+        return;
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (chunk) {
+          acc += chunk;
+          setTranslation(acc);
+        }
+      }
+      setTranslatedFromLen(text.length);
+    } catch (err) {
+      if ((err as { name?: string }).name === "AbortError") return;
+      setError(String(err));
+    } finally {
+      setTranslating(false);
+    }
+  }, [part.text]);
+
+  const onOpenJa = useCallback(() => {
+    setTab("ja");
+    if (!translation && !translating) void runTranslate();
+  }, [translation, translating, runTranslate]);
+
+  // 思考ログ本文が伸びた分 (delta 追記) があれば再翻訳を提案する。
+  const stale = translation !== "" && part.text.length !== translatedFromLen;
+
+  return (
+    <details
+      className="mb-2 rounded border border-gray-200 bg-white/70"
+      style={{ fontSize: "0.9em" }}
+    >
+      <summary className="flex cursor-pointer select-none items-center gap-2 px-2 py-1 text-gray-500 hover:bg-gray-100">
+        <span>思考ログ ({part.text.length} 文字)</span>
+        <span className="ml-auto flex items-center gap-1" style={{ fontSize: "0.9em" }}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              setTab("source");
+            }}
+            className={`rounded px-2 py-0.5 ${
+              tab === "source"
+                ? "bg-gray-200 text-gray-800"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            原文
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onOpenJa();
+            }}
+            className={`rounded px-2 py-0.5 ${
+              tab === "ja"
+                ? "bg-emerald-100 text-emerald-800"
+                : "text-emerald-700 hover:bg-emerald-50"
+            }`}
+            title="AI 翻訳で日本語に変換 (llama-server)"
+          >
+            {translating ? "翻訳中…" : "日本語"}
+          </button>
+        </span>
+      </summary>
+      {tab === "source" ? (
+        <pre
+          className="whitespace-pre-wrap break-words px-3 py-2 font-mono leading-relaxed text-gray-700"
+          style={{ fontSize: "0.9em" }}
+        >
+          {part.text}
+        </pre>
+      ) : (
+        <div className="px-3 py-2" style={{ fontSize: "0.9em" }}>
+          {error ? (
+            <div className="text-red-600">{error}</div>
+          ) : translation === "" && translating ? (
+            <div className="text-gray-500">● 翻訳中…</div>
+          ) : translation === "" ? (
+            <div className="text-gray-400">（未翻訳）</div>
+          ) : (
+            <>
+              <pre className="whitespace-pre-wrap break-words leading-relaxed text-gray-800">
+                {translation}
+                {translating && <span className="text-emerald-600"> ▌</span>}
+              </pre>
+              {stale && !translating && (
+                <div className="mt-2 flex items-center gap-2 text-gray-500">
+                  <span>思考ログが更新されています</span>
+                  <button
+                    type="button"
+                    onClick={() => void runTranslate()}
+                    className="rounded bg-emerald-600 px-2 py-0.5 text-white hover:bg-emerald-500"
+                  >
+                    再翻訳
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </details>
+  );
 }
 
 // メッセージ履歴のスクロール領域内に「次の下書きメッセージ」として並ぶ
