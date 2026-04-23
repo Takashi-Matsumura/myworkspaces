@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import { sanitizeSub } from "./user";
+import { getUserNetworkIsolation } from "./user-network";
 import type { ClientMessage } from "./ws-protocol";
 
 // イメージ / コンテナ / ボリュームの命名規約。
@@ -13,6 +14,24 @@ const CONTAINER_PREFIX = "myworkspaces-shell-";
 const VOLUME_PREFIX = "myworkspaces-home-";
 const ROLE_LABEL_KEY = "io.myworkspaces.role";
 const SUB_LABEL_KEY = "io.myworkspaces.sub";
+
+// 隔離モード用 user-defined bridge。
+// Internal: true にすることで、このネットワークに接続されたコンテナからは
+// 外部インターネットにも、gateway 経由でのホストにも到達できなくなる。
+// 一方、ホスト上の llama-server (host.docker.internal:8080) への到達は
+// 「サイドカー egress-proxy コンテナ」を経由して行う。プロキシは通常 bridge にも
+// 同居し、isolated ネットワーク内に固定 IP (PROXY_IP) を持つ。ユーザコンテナの
+// ExtraHosts で host.docker.internal -> PROXY_IP を書いてあるので opencode 側の
+// endpoint (http://host.docker.internal:8080) はそのまま動く。
+export const ISOLATED_NETWORK = "myworkspaces-isolated";
+const ISOLATED_SUBNET = "172.25.0.0/16";
+
+const PROXY_CONTAINER = "myworkspaces-egress-proxy";
+const PROXY_IMAGE = "alpine/socat:latest";
+const PROXY_IP = "172.25.0.2";
+// opencode.json のデフォルト endpoint とホストの llama-server ポート (8080) に合わせる。
+// 将来 endpoint を可変にするなら、ここも設定から引く構造に直す。
+const PROXY_FORWARD_PORT = 8080;
 
 // docker-compose のプロジェクトラベルを付与し、Docker Desktop 上で
 // postgres と同じ "myworkspaces" グループにまとめて表示する。
@@ -41,7 +60,11 @@ export type ContainerStatus = {
   exists: boolean;
   running: boolean;
   id?: string; // short (12 chars) Docker container ID
+  networkMode?: string; // "bridge" | ISOLATED_NETWORK など
+  isolated?: boolean; // networkMode === ISOLATED_NETWORK
 };
+
+export type NetworkOptions = { isolated: boolean };
 
 const docker = new Docker();
 
@@ -100,6 +123,113 @@ export async function ensureImageBuilt(): Promise<void> {
   console.log(`[docker] built ${IMAGE}`);
 }
 
+// 隔離ネットワークを冪等に用意する。既に存在していれば何もしない。
+// サーバ起動時と、隔離 ON に切り替える API ハンドラから呼ばれる想定。
+export async function ensureIsolatedNetwork(): Promise<void> {
+  try {
+    await docker.getNetwork(ISOLATED_NETWORK).inspect();
+    return;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status !== 404) throw err;
+  }
+  await docker.createNetwork({
+    Name: ISOLATED_NETWORK,
+    Driver: "bridge",
+    CheckDuplicate: true,
+    Internal: true,
+    IPAM: {
+      Config: [{ Subnet: ISOLATED_SUBNET }],
+    },
+    Options: {
+      "com.docker.network.bridge.name": "mw-iso0",
+    },
+    Labels: {
+      [ROLE_LABEL_KEY]: "isolated-network",
+      ...COMPOSE_LABELS,
+    },
+  });
+  console.log(`[docker] isolated network created: ${ISOLATED_NETWORK}`);
+}
+
+async function ensureProxyImage(): Promise<void> {
+  try {
+    await docker.getImage(PROXY_IMAGE).inspect();
+    return;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status !== 404) throw err;
+  }
+  console.log(`[docker] pulling ${PROXY_IMAGE}...`);
+  await new Promise<void>((resolve, reject) => {
+    docker.pull(PROXY_IMAGE, (err: Error | null, stream: NodeJS.ReadableStream) => {
+      if (err) return reject(err);
+      docker.modem.followProgress(stream, (e) => (e ? reject(e) : resolve()));
+    });
+  });
+}
+
+// 隔離モード用 egress プロキシ。全ユーザ共有の 1 コンテナ。
+// bridge (外向き ok) と isolated の両方に attach し、isolated 側の固定 IP で
+// ユーザコンテナからの llama-server 行きトラフィックだけを中継する。
+export async function ensureEgressProxyContainer(): Promise<void> {
+  const existing = docker.getContainer(PROXY_CONTAINER);
+  try {
+    const info = await existing.inspect();
+    if (!info.State.Running) {
+      await existing.start();
+      console.log(`[docker] started egress proxy: ${PROXY_CONTAINER}`);
+    }
+    return;
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status !== 404) throw err;
+  }
+
+  await ensureIsolatedNetwork();
+  await ensureProxyImage();
+
+  try {
+    const created = await docker.createContainer({
+      name: PROXY_CONTAINER,
+      Image: PROXY_IMAGE,
+      Cmd: [
+        `TCP-LISTEN:${PROXY_FORWARD_PORT},fork,reuseaddr`,
+        `TCP:host.docker.internal:${PROXY_FORWARD_PORT}`,
+      ],
+      Labels: {
+        [ROLE_LABEL_KEY]: "egress-proxy",
+        ...COMPOSE_LABELS,
+        "com.docker.compose.service": "egress-proxy",
+      },
+      HostConfig: {
+        RestartPolicy: { Name: "unless-stopped" },
+        NetworkMode: "bridge",
+        ExtraHosts: ["host.docker.internal:host-gateway"],
+        Memory: 64 * 1024 * 1024,
+        PidsLimit: 64,
+      },
+    });
+    await docker.getNetwork(ISOLATED_NETWORK).connect({
+      Container: PROXY_CONTAINER,
+      EndpointConfig: {
+        IPAMConfig: { IPv4Address: PROXY_IP },
+      },
+    });
+    await created.start();
+    console.log(`[docker] created egress proxy: ${PROXY_CONTAINER} (ip=${PROXY_IP})`);
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 409) {
+      const c = docker.getContainer(PROXY_CONTAINER);
+      const info = await c.inspect();
+      if (!info.State.Running) await c.start();
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function ensureHomeVolume(sub: string): Promise<string> {
   const name = volumeName(sub);
   try {
@@ -121,7 +251,10 @@ export async function ensureHomeVolume(sub: string): Promise<string> {
   return name;
 }
 
-export async function ensureContainer(sub: string): Promise<Docker.Container> {
+export async function ensureContainer(
+  sub: string,
+  net?: NetworkOptions,
+): Promise<Docker.Container> {
   const name = containerName(sub);
   const existing = docker.getContainer(name);
   try {
@@ -134,6 +267,14 @@ export async function ensureContainer(sub: string): Promise<Docker.Container> {
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
     if (status !== 404) throw err;
+  }
+
+  // 新規作成時のみ隔離判定を行う。明示指定が無ければ DB から取る。
+  // 既存コンテナ利用時は DB 値と違っていても干渉しない (切替は API 経由で削除→再作成)。
+  const isolated = net?.isolated ?? (await getUserNetworkIsolation(sub));
+  if (isolated) {
+    await ensureIsolatedNetwork();
+    await ensureEgressProxyContainer();
   }
 
   const home = await ensureHomeVolume(sub);
@@ -161,9 +302,22 @@ export async function ensureContainer(sub: string): Promise<Docker.Container> {
         PidsLimit: PID_LIMIT,
         // 「ALL ドロップ → apt 等が必要とする最小 cap だけ追加」方針。
         // ptyserver-demo から踏襲。opencode CLI 自体は cap 不要。
+        // NET_RAW は ping (RAW ICMP socket) 用。iputils-ping は file cap に頼るが、
+        // no-new-privileges 下ではファイルケイパが無効化されるため、コンテナ全体で
+        // 明示的に付与する。Sysctls の ping_group_range もセットで有効にしているが、
+        // iputils-ping は RAW をまず試す仕様なので、NET_RAW が無いと失敗する。
         CapDrop: ["ALL"],
-        CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "SETGID", "SETUID"],
+        CapAdd: [
+          "CHOWN",
+          "DAC_OVERRIDE",
+          "FOWNER",
+          "FSETID",
+          "SETGID",
+          "SETUID",
+          "NET_RAW",
+        ],
         SecurityOpt: ["no-new-privileges"],
+        Sysctls: { "net.ipv4.ping_group_range": "0 2147483647" },
         Mounts: [
           {
             Type: "volume",
@@ -171,14 +325,22 @@ export async function ensureContainer(sub: string): Promise<Docker.Container> {
             Target: "/root",
           },
         ],
-        // Linux の Docker では host.docker.internal が標準では解決されないので
-        // host-gateway を明示して、opencode からホストの llama-server (:8080) に到達できるようにする。
-        // Docker Desktop (Mac/Windows) では元から解決できるが、付けても害はない。
-        ExtraHosts: ["host.docker.internal:host-gateway"],
+        // 隔離モード時: Internal: true の自前 bridge に載せる (外向き全遮断)。
+        // 非隔離は Docker デフォルトの bridge (未指定) のまま。
+        ...(isolated ? { NetworkMode: ISOLATED_NETWORK } : {}),
+        // 非隔離: host-gateway でホストの llama-server (:8080) に直接到達。
+        // 隔離: 同一 isolated bridge 上の egress-proxy サイドカーに解決させる。
+        //       opencode.json の endpoint (http://host.docker.internal:8080) は
+        //       プロキシで同ポートを forward しているので書き換え不要。
+        ExtraHosts: isolated
+          ? [`host.docker.internal:${PROXY_IP}`]
+          : ["host.docker.internal:host-gateway"],
       },
     });
     await created.start();
-    console.log(`[docker] created container: ${name}`);
+    console.log(
+      `[docker] created container: ${name} (isolated=${isolated})`,
+    );
     return created;
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
@@ -226,10 +388,13 @@ export async function getContainerStatus(sub: string): Promise<ContainerStatus> 
   const name = containerName(sub);
   try {
     const info = await docker.getContainer(name).inspect();
+    const networkMode = info.HostConfig?.NetworkMode ?? undefined;
     return {
       exists: true,
       running: Boolean(info.State?.Running),
       id: typeof info.Id === "string" ? info.Id.slice(0, 12) : undefined,
+      networkMode,
+      isolated: networkMode === ISOLATED_NETWORK,
     };
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
