@@ -84,9 +84,10 @@ RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VER
     mv /root/.opencode/bin/opencode /usr/local/bin/opencode && \
     rm -rf /root/.opencode
 
-# read_excel.ts が require する xlsx をグローバルに入れておく。
-# （ワークスペースごとに npm install する手間を省くため）
-RUN npm install -g xlsx
+# read_excel.ts / read_pdf.ts がそれぞれ require する xlsx / pdfjs-dist を
+# グローバルに入れておく。(ワークスペースごとに npm install する手間を省くため)
+# pdfjs-dist は Node 向け legacy build (`pdfjs-dist/legacy/build/pdf.mjs`) を使う。
+RUN npm install -g xlsx pdfjs-dist
 
 # Claude Code CLI。Bash パネルから `claude` で起動する。
 # npm global install で /usr/lib/node_modules/@anthropic-ai/claude-code/ に落ち、
@@ -109,9 +110,11 @@ ENV NODE_PATH=/usr/lib/node_modules
 RUN mkdir -p /opt/myworkspaces/templates/.opencode/tools
 COPY templates/describe_image.ts /opt/myworkspaces/templates/.opencode/tools/
 COPY templates/read_excel.ts /opt/myworkspaces/templates/.opencode/tools/
+COPY templates/read_pdf.ts /opt/myworkspaces/templates/.opencode/tools/
 COPY templates/language-rules.md /opt/myworkspaces/templates/
 COPY templates/vision-rules.md /opt/myworkspaces/templates/
 COPY templates/business-rules.md /opt/myworkspaces/templates/
+COPY templates/pdf-rules.md /opt/myworkspaces/templates/
 COPY templates/opencode.json /opt/myworkspaces/templates/
 
 WORKDIR /root

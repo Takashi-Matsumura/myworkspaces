@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["language-rules.md", "vision-rules.md", "business-rules.md"],
+  "instructions": ["language-rules.md", "vision-rules.md", "business-rules.md", "pdf-rules.md"],
   "provider": {
     "llamacpp": {
       "npm": "@ai-sdk/openai-compatible",

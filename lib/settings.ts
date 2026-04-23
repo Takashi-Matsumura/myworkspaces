@@ -95,7 +95,12 @@ export function decodeApiKey(encoded: string): string {
 // 既存ワークスペースの opencode.json は変更しない。
 export function buildOpencodeJson(settings: UserSettings): string {
   const s = settings.opencode;
-  const instructions = ["language-rules.md", "vision-rules.md", "business-rules.md"];
+  const instructions = [
+    "language-rules.md",
+    "vision-rules.md",
+    "business-rules.md",
+    "pdf-rules.md",
+  ];
 
   if (s.provider === "llama-server") {
     const model = s.model.trim() || "gemma-4-e4b-it-Q4_K_M.gguf";
