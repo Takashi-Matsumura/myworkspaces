@@ -13,16 +13,25 @@ import {
   ArrowUpDown,
   CirclePlus,
   CircleMinus,
+  FileText,
+  Wand2,
+  HelpCircle,
 } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
+import type { BackTab } from "./back-tabs-panel";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
-// Business パネルは 表面=opencode チャット / 裏面=RAG ドキュメント。
+// Business パネルは 表面=opencode チャット / 裏面=BackTabsPanel (RAG/スキル/ヘルプ)。
 // Coding/Ubuntu パネルは従来どおり XtermView ベース。
 const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
-const BusinessBackPanel = dynamic(() => import("./business-back-panel"), {
+const BackTabsPanel = dynamic(() => import("./back-tabs-panel"), {
   ssr: false,
 });
+const RagDocuments = dynamic(() => import("./rag-documents"), { ssr: false });
+const OpencodeSkills = dynamic(() => import("./opencode-skills"), {
+  ssr: false,
+});
+const BusinessHelp = dynamic(() => import("./business-help"), { ssr: false });
 const OpencodeHintOverlay = dynamic(() => import("./opencode-hint-overlay"), {
   ssr: false,
 });
@@ -71,6 +80,29 @@ const VARIANT_STYLES: Record<TerminalVariant, VariantStyle> = {
     panelBg: "#0b0b0f",
   },
 };
+
+const iconClass = { width: "1em", height: "1em" } as const;
+
+const businessTabs: BackTab[] = [
+  {
+    key: "rag",
+    label: "RAG ドキュメント",
+    icon: <FileText style={iconClass} />,
+    render: ({ fontSize }) => <RagDocuments fontSize={fontSize} />,
+  },
+  {
+    key: "skills",
+    label: "スキル",
+    icon: <Wand2 style={iconClass} />,
+    render: ({ fontSize }) => <OpencodeSkills fontSize={fontSize} />,
+  },
+  {
+    key: "help",
+    label: "ヘルプ",
+    icon: <HelpCircle style={iconClass} />,
+    render: ({ fontSize }) => <BusinessHelp fontSize={fontSize} />,
+  },
+];
 
 function defaultSlotOffset(slot: "left" | "center" | "right"): { cx: number; cy: number } {
   if (typeof window === "undefined") return { cx: 80, cy: 80 };
@@ -368,7 +400,11 @@ export default function FloatingTerminal({
                 }`}
               >
                 {isBusiness ? (
-                  <BusinessBackPanel fontSize={fontSize} />
+                  <BackTabsPanel
+                    tabs={businessTabs}
+                    variant="business"
+                    fontSize={fontSize}
+                  />
                 ) : backNonce > 0 && session ? (
                   <XtermView
                     key={`${backNonce}-${fontSize}-back`}
