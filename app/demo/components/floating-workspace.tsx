@@ -524,6 +524,14 @@ export default function FloatingWorkspace({
           body: JSON.stringify({ id: ws.id }),
         });
       } catch {}
+      // opencode サイドカーの cwd を切替 (fire-and-forget)。新規セッションの
+      // session.directory を正しいワークスペースに向けるため。
+      // 失敗してもチャット UI 側の初期化で再度 activate されるため致命的ではない。
+      void fetch("/api/opencode/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: ws.id }),
+      }).catch(() => {});
       await refreshList();
     },
     [loadDir, onWorkspaceChange, refreshList],

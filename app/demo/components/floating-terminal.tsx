@@ -6,13 +6,21 @@ import {
   type PointerEvent,
 } from "react";
 import dynamic from "next/dynamic";
-import { X, Minus, Maximize2, ArrowUpDown } from "lucide-react";
+import {
+  X,
+  Minus,
+  Maximize2,
+  ArrowUpDown,
+  CirclePlus,
+  CircleMinus,
+} from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
-// 現状 Business 裏面は opencode チャット UI に置き換え中 (Phase 3-2)。
-// RAG ドキュメントは別所に移設する予定。RagDocuments の import は戻す時に復活。
+// Business パネルは 表面=opencode チャット / 裏面=RAG ドキュメント。
+// Coding/Ubuntu パネルは従来どおり XtermView ベース。
 const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
+const RagDocuments = dynamic(() => import("./rag-documents"), { ssr: false });
 const OpencodeHintOverlay = dynamic(() => import("./opencode-hint-overlay"), {
   ssr: false,
 });
@@ -165,9 +173,13 @@ export default function FloatingTerminal({
   const left = (scenePos.x + view.x) * view.zoom;
   const top = (scenePos.y + view.y) * view.zoom;
 
-  // Ubuntu variant は表面が既にシェル。他の variant は表面が opencode、裏面がシェル。
+  // variant ごとの表裏:
+  // - coding: 表面 = opencode TUI (xterm), 裏面 = shell (xterm)
+  // - business: 表面 = opencode チャット UI (React), 裏面 = RAG ドキュメント
+  // - ubuntu: 表面 = shell (xterm), 裏面なし
   const frontCmd: "opencode" | "shell" = variant === "ubuntu" ? "shell" : "opencode";
-  const backAvailable = variant !== "ubuntu"; // Ubuntu は裏面なし (表面と同じ bash)
+  const backAvailable = variant !== "ubuntu";
+  const isBusiness = variant === "business";
 
   const headerBar = (title: string) => (
     <div
@@ -209,19 +221,19 @@ export default function FloatingTerminal({
         <button
           type="button"
           onClick={() => changeFontSize(-1)}
-          className="rounded px-1 text-[10px] text-white hover:bg-white/10"
+          className="rounded p-0.5 text-white hover:bg-white/10"
           title="文字サイズを下げる"
         >
-          A-
+          <CircleMinus className="h-4 w-4" />
         </button>
         <span className="font-mono text-[10px] text-white min-w-[1.5rem] text-center">{fontSize}</span>
         <button
           type="button"
           onClick={() => changeFontSize(1)}
-          className="rounded px-1 text-[10px] text-white hover:bg-white/10"
+          className="rounded p-0.5 text-white hover:bg-white/10"
           title="文字サイズを上げる"
         >
-          A+
+          <CirclePlus className="h-4 w-4" />
         </button>
         {backAvailable && (
           <button
@@ -230,9 +242,11 @@ export default function FloatingTerminal({
             className="ml-1 rounded p-0.5 text-white hover:bg-white/10"
             title={
               flipped
-                ? "表面に戻す"
+                ? variant === "business"
+                  ? "チャットに戻す"
+                  : "表面に戻す"
                 : variant === "business"
-                  ? "チャット UI を開く"
+                  ? "RAG ドキュメントを開く"
                   : "シェルを開く"
             }
           >
@@ -281,13 +295,21 @@ export default function FloatingTerminal({
             backgroundColor: style.panelBg,
           }}
         >
-          {headerBar(style.label)}
+          {headerBar(isBusiness ? `${style.label} — チャット` : style.label)}
           {!minimized && (
             <div
-              className="relative flex-1 overflow-hidden rounded-b-lg bg-[#0b0b0f]"
-              style={style.filter ? { filter: style.filter } : undefined}
+              className={`relative flex-1 overflow-hidden rounded-b-lg ${
+                isBusiness ? "bg-white" : "bg-[#0b0b0f]"
+              }`}
+              // Business は React チャット (白ベース) なので CSS filter は当てない。
+              // Coding/Ubuntu は XtermView ベースなのでテーマカラー用の filter を適用。
+              style={
+                !isBusiness && style.filter ? { filter: style.filter } : undefined
+              }
             >
-              {session ? (
+              {isBusiness ? (
+                <OpencodeChat fontSize={fontSize} />
+              ) : session ? (
                 <XtermView
                   key={`${session.nonce}-${fontSize}-front`}
                   cwd={session.cwd}
@@ -305,14 +327,16 @@ export default function FloatingTerminal({
                 onPointerMove={onResizePointerMove}
                 onPointerUp={onResizePointerUp}
                 style={{
-                  background: "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)",
+                  background: isBusiness
+                    ? "linear-gradient(135deg, transparent 50%, rgba(33,115,70,0.3) 50%)"
+                    : "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)",
                 }}
               />
             </div>
           )}
-          {/* 初回ガイド。Business の invert filter を避けるため、filter 付きの
-              inner の外（= Front outer の直下）に置く。 */}
-          {!minimized && variant !== "ubuntu" && (
+          {/* 初回ガイドは Coding の xterm TUI に対してのみ有効。Business は
+              React チャット UI なのでヒントは不要。 */}
+          {!minimized && variant === "coding" && (
             <OpencodeHintOverlay variant={variant} />
           )}
         </div>
@@ -331,18 +355,18 @@ export default function FloatingTerminal({
             }}
           >
             {headerBar(
-              variant === "business"
-                ? `${style.label} — チャット (新 UI)`
+              isBusiness
+                ? `${style.label} — RAG ドキュメント`
                 : `${style.label} — shell`,
             )}
             {!minimized && (
               <div
                 className={`relative flex-1 overflow-hidden rounded-b-lg ${
-                  variant === "business" ? "bg-white" : "bg-[#0b0b0f]"
+                  isBusiness ? "bg-white" : "bg-[#0b0b0f]"
                 }`}
               >
-                {variant === "business" ? (
-                  <OpencodeChat />
+                {isBusiness ? (
+                  <RagDocuments fontSize={fontSize} />
                 ) : backNonce > 0 && session ? (
                   <XtermView
                     key={`${backNonce}-${fontSize}-back`}

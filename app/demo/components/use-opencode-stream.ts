@@ -32,6 +32,22 @@ export type MessageInfo = {
   partIds: string[]; // updated で到着した順
 };
 
+export type ModelRef = {
+  providerID: string;
+  modelID: string;
+};
+
+// ワークスペースの opencode.json から引いたモデル表示情報。
+// session の info.model は assistant 側 null / user 側 slug で当てにならないため、
+// 設定ファイルから直接取るのが最も確実。
+export type OpencodeConfig = {
+  workspaceId: string;
+  providerID: string;
+  modelID: string;
+  providerName: string;
+  modelName: string;
+};
+
 export type PartInfo = {
   id: string;
   messageID: string;
@@ -45,6 +61,8 @@ type State = {
   messagesBySession: Record<string, MessageInfo[]>;
   parts: Record<string, PartInfo>;
   busyBySession: Record<string, boolean>;
+  // 現在アクティブなワークスペースの opencode.json から解決したモデル情報。
+  config: OpencodeConfig | null;
   connected: boolean;
 };
 
@@ -70,6 +88,7 @@ type Action =
       delta: string;
     }
   | { type: "session/busy"; sessionId: string; busy: boolean }
+  | { type: "config/set"; config: OpencodeConfig | null }
   | { type: "connected"; value: boolean };
 
 function initialState(): State {
@@ -78,6 +97,7 @@ function initialState(): State {
     messagesBySession: {},
     parts: {},
     busyBySession: {},
+    config: null,
     connected: false,
   };
 }
@@ -189,6 +209,8 @@ function reducer(state: State, action: Action): State {
           [action.sessionId]: action.busy,
         },
       };
+    case "config/set":
+      return { ...state, config: action.config };
     case "connected":
       return { ...state, connected: action.value };
     default:
@@ -239,7 +261,11 @@ function applySseMessage(raw: string, dispatch: (a: Action) => void): void {
       return;
     }
     case "message.updated": {
-      const info = p.info as { id?: string; role?: string; sessionID?: string } | undefined;
+      // info.model は user 側に session slug、assistant 側に null が入る
+      // 奇妙なスキーマなので、ここでは model 情報は扱わない。
+      const info = p.info as
+        | { id?: string; role?: string; sessionID?: string }
+        | undefined;
       if (info?.id && info.sessionID) {
         dispatch({
           type: "messages/upsert",
@@ -305,7 +331,9 @@ function flattenHistory(raw: unknown): {
   if (!Array.isArray(raw)) return { messages, parts };
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
-    const info = (entry as { info?: { id?: string; role?: string; sessionID?: string } }).info;
+    const info = (entry as {
+      info?: { id?: string; role?: string; sessionID?: string };
+    }).info;
     const partsArr = (entry as { parts?: unknown[] }).parts;
     if (!info?.id || !info.sessionID) continue;
     const partIds: string[] = [];
@@ -376,6 +404,22 @@ export function useOpencodeStream() {
     dispatch({ type: "messages/replace", sessionId, messages, parts });
   }, []);
 
+  // opencode.json から解決したモデル情報を取得する。
+  // ワークスペース切替後や初期化直後に呼ぶと config が更新される。
+  const loadConfig = useCallback(async (): Promise<void> => {
+    try {
+      const resp = await fetch("/api/opencode/config");
+      if (!resp.ok) {
+        dispatch({ type: "config/set", config: null });
+        return;
+      }
+      const json = (await resp.json()) as OpencodeConfig;
+      dispatch({ type: "config/set", config: json });
+    } catch {
+      dispatch({ type: "config/set", config: null });
+    }
+  }, []);
+
   const createSession = useCallback(async (): Promise<SessionInfo | null> => {
     const resp = await fetch("/api/opencode/sessions", {
       method: "POST",
@@ -411,12 +455,22 @@ export function useOpencodeStream() {
     [],
   );
 
+  const abortSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    const resp = await fetch(
+      `/api/opencode/sessions/${encodeURIComponent(sessionId)}/abort`,
+      { method: "POST" },
+    );
+    return resp.ok;
+  }, []);
+
   return {
     state,
     refreshSessions,
     loadMessages,
+    loadConfig,
     createSession,
     deleteSession,
     sendPrompt,
+    abortSession,
   };
 }

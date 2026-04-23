@@ -47,7 +47,13 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function RagDocuments() {
+export default function RagDocuments({
+  fontSize = 13,
+}: {
+  // パネルの A-/A+ と連動させるための基本フォントサイズ。opencode-chat と
+  // 同じく root に px で設定し、子は em で相対サイズを決める。
+  fontSize?: number;
+}) {
   const [docs, setDocs] = useState<RagDoc[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -103,9 +109,10 @@ export default function RagDocuments() {
 
   return (
     <div
-      className={`flex h-full flex-col overflow-auto bg-white p-3 text-xs transition-colors ${
+      className={`flex h-full flex-col overflow-auto bg-white p-3 transition-colors ${
         dragOver ? "bg-[#eaf5ea]" : ""
       }`}
+      style={{ fontSize: `${fontSize}px`, lineHeight: 1.4 }}
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -120,7 +127,10 @@ export default function RagDocuments() {
       }}
     >
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-wider text-[#1a5c38]">
+        <div
+          className="uppercase tracking-wider text-[#1a5c38]"
+          style={{ fontSize: "0.75em" }}
+        >
           RAG ドキュメント（Business 用）
         </div>
         <button
@@ -129,12 +139,15 @@ export default function RagDocuments() {
           className="rounded p-1 text-[#1a5c38] hover:bg-[#eaf5ea]"
           title="再読み込み"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={loading ? "animate-spin" : ""}
+            style={{ width: "1.1em", height: "1.1em" }}
+          />
         </button>
       </div>
 
       <label className="flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-[#b7d9b7] bg-[#f4faf4] p-3 text-[#1a5c38] hover:bg-[#eaf5ea]">
-        <Upload className="h-4 w-4" />
+        <Upload style={{ width: "1.2em", height: "1.2em" }} />
         <span>
           {uploading ? "取り込み中..." : "ファイルをドラッグ / クリックで追加"}
         </span>
@@ -153,17 +166,26 @@ export default function RagDocuments() {
       </label>
 
       {error && (
-        <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+        <div
+          className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700"
+          style={{ fontSize: "0.85em" }}
+        >
           {error}
         </div>
       )}
 
       <div className="mt-3 flex-1">
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-[#1a5c38]">
+        <div
+          className="mb-1 uppercase tracking-wider text-[#1a5c38]"
+          style={{ fontSize: "0.75em" }}
+        >
           取り込み済み ({docs.length})
         </div>
         {docs.length === 0 ? (
-          <div className="rounded border border-[#b7d9b7] bg-[#f4faf4] p-3 text-center text-[11px] leading-relaxed text-[#1a5c38]">
+          <div
+            className="rounded border border-[#b7d9b7] bg-[#f4faf4] p-3 text-center leading-relaxed text-[#1a5c38]"
+            style={{ fontSize: "0.85em" }}
+          >
             まだドキュメントがありません。
             <br />
             .txt / .md / .pdf / .html を取り込むと、
@@ -179,12 +201,15 @@ export default function RagDocuments() {
                 key={d.id}
                 className="flex items-center gap-2 rounded border border-[#b7d9b7] bg-white px-2 py-1"
               >
-                <FileText className="h-3.5 w-3.5 shrink-0 text-[#1a5c38]" />
+                <FileText
+                  className="shrink-0 text-[#1a5c38]"
+                  style={{ width: "1.1em", height: "1.1em" }}
+                />
                 <div className="flex-1 overflow-hidden">
                   <div className="truncate text-slate-800" title={d.filename}>
                     {d.filename}
                   </div>
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-slate-500" style={{ fontSize: "0.75em" }}>
                     {d.chunkCount} chunks · {formatBytes(d.bytes)}
                   </div>
                 </div>
@@ -194,7 +219,7 @@ export default function RagDocuments() {
                   className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
                   title="削除"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 style={{ width: "1.1em", height: "1.1em" }} />
                 </button>
               </li>
             ))}
