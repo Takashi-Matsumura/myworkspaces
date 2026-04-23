@@ -11,6 +11,9 @@ import type { View, SceneRect } from "./whiteboard-canvas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
 const RagDocuments = dynamic(() => import("./rag-documents"), { ssr: false });
+const OpencodeHintOverlay = dynamic(() => import("./opencode-hint-overlay"), {
+  ssr: false,
+});
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -304,6 +307,11 @@ export default function FloatingTerminal({
                 }}
               />
             </div>
+          )}
+          {/* 初回ガイド。Business の invert filter を避けるため、filter 付きの
+              inner の外（= Front outer の直下）に置く。 */}
+          {!minimized && variant !== "ubuntu" && (
+            <OpencodeHintOverlay variant={variant} />
           )}
         </div>
 
