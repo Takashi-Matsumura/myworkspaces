@@ -87,6 +87,15 @@ RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VER
 # （ワークスペースごとに npm install する手間を省くため）
 RUN npm install -g xlsx
 
+# Claude Code CLI。Bash パネルから `claude` で起動する。
+# npm global install で /usr/lib/node_modules/@anthropic-ai/claude-code/ に落ち、
+# /usr/local/bin/claude シンボリックリンクが作られる (opencode と同じ配置ポリシー)。
+# 認証は初回 `claude login` で OAuth 経由。トークンは /root/.config/claude-code/
+# 配下に保存される。/root は named volume なので「コンテナ作り直し」後も
+# ログイン状態は維持される。
+# ネットワーク隔離 ON では api.anthropic.com に到達できないため利用不可 (README 参照)。
+RUN npm install -g @anthropic-ai/claude-code
+
 # opencode のカスタムツール (read_excel.ts) が ESM import で xlsx を解決できるよう、
 # グローバル node_modules を NODE_PATH に入れる。未設定だと tsx の resolver が
 # "/root/workspaces/<id>/.opencode/tools/read_excel.ts" の隣から node_modules を辿り、
