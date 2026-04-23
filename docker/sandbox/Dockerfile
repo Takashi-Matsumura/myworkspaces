@@ -84,10 +84,20 @@ RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VER
     mv /root/.opencode/bin/opencode /usr/local/bin/opencode && \
     rm -rf /root/.opencode
 
-# read_excel.ts / read_pdf.ts がそれぞれ require する xlsx / pdfjs-dist を
-# グローバルに入れておく。(ワークスペースごとに npm install する手間を省くため)
-# pdfjs-dist は Node 向け legacy build (`pdfjs-dist/legacy/build/pdf.mjs`) を使う。
-RUN npm install -g xlsx pdfjs-dist
+# read_excel.ts が require する xlsx をグローバルに入れておく。
+# (ワークスペースごとに npm install する手間を省くため)
+RUN npm install -g xlsx
+
+# read_pdf.ts は child_process 経由で Python + pypdf を呼ぶ。
+# Node.js 側の PDF パーサ (pdfjs-dist v5 / pdf-parse v2) は CID フォント
+# (reportlab の HeiseiKakuGo など) の ToUnicode CMap を読み損ねて抽出テキストが
+# 空になる事例があるため、ToUnicode を素直に扱える pypdf を外部プロセスで使う。
+# python3 はベースに既に入っており、pip だけ追加する。
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3-pip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install --break-system-packages --no-cache-dir pypdf
 
 # Claude Code CLI。Bash パネルから `claude` で起動する。
 # npm global install で /usr/lib/node_modules/@anthropic-ai/claude-code/ に落ち、
