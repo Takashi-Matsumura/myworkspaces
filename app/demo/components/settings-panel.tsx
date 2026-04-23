@@ -423,6 +423,9 @@ export default function SettingsPanel({
                     ON にするとコンテナから <code>example.com</code> などの外部インター
                     ネットには到達できなくなります。ホスト上の llama-server
                     (<code>host.docker.internal:8080</code>) への接続は引き続き可能です。
+                    ただし Claude Code など、ホスト外の API
+                    (<code>api.anthropic.com</code> 等) を必要とするツールは隔離 ON では
+                    利用できません。
                   </p>
 
                   <div className="mt-2 flex flex-col gap-1 font-mono text-[10px] text-slate-500">
