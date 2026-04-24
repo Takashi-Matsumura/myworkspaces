@@ -23,6 +23,7 @@ import {
 } from "./opencode-chat";
 import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
+import { ProgressPane } from "./progress-pane";
 
 // Coding パネル表面の「Claude Code CLI 風 上下分割 UI」トップレベル。
 // OpencodeChat (Business 用) とは別コンポーネントだが、SSE / 状態管理 / 入力
@@ -380,6 +381,14 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
           )}
         </div>
       </main>
+
+      {/* 進捗サマリ (ステップ進行 + 現在実行中 tool) */}
+      <ProgressPane
+        messages={messages}
+        parts={state.parts}
+        busy={busy}
+        activeId={activeId}
+      />
 
       {/* 下部固定コンポーザ */}
       <div

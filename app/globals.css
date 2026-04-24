@@ -33,3 +33,24 @@ body {
 .chat-dark .katex * {
   color: inherit;
 }
+
+/* ダーク地の Coding パネル用スクロールバー。
+   白ベースのデフォルトだと黒地に浮くので、半透明の白に差し替える。 */
+.chat-dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.chat-dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+.chat-dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.chat-dark {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
