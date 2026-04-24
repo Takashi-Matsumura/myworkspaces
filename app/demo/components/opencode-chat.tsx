@@ -20,6 +20,7 @@ import {
   type PartInfo,
   type SessionInfo,
 } from "./use-opencode-stream";
+import { CHAT_THEMES, type ChatTheme, type ChatVariant } from "./chat-theme";
 
 export type SkillSummary = {
   name: string;
@@ -50,12 +51,16 @@ function expandSlashCommand(text: string, skills: SkillSummary[]): string {
 
 export default function OpencodeChat({
   fontSize = 13,
+  variant = "business",
 }: {
   // パネル側の A- / A+ と連動させるためのメッセージ本文のフォントサイズ。
   // ヘッダーやキャプション類は固定サイズ (可変にすると詰まりやすいため)、
   // 会話本文 (MessageView) と入力欄だけに反映する。
   fontSize?: number;
+  // Business (白) / Coding (黒) でテーマを切替。default は後方互換で business。
+  variant?: ChatVariant;
 }) {
+  const theme = CHAT_THEMES[variant];
   const {
     state,
     refreshSessions,
@@ -194,17 +199,17 @@ export default function OpencodeChat({
     // 定義する。Tailwind の text-xs / text-sm / text-[10px] は rem 固定で
     // root の font-size を見ないため、A-/A+ 連動のために使わない。
     <div
-      className="flex h-full w-full flex-col bg-white text-gray-900"
+      className={`flex h-full w-full flex-col ${theme.rootBg} ${theme.rootText} ${theme.rootExtra}`}
       style={{ fontSize: `${fontSize}px`, lineHeight: 1.4 }}
     >
       <header
-        className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2"
+        className={`flex items-center gap-3 border-b ${theme.headerBorder} ${theme.headerBg} px-3 py-2`}
         style={{ fontSize: "0.85em" }}
       >
         <button
           type="button"
           onClick={() => setSessionListCollapsed((v) => !v)}
-          className="rounded p-1 text-gray-500 hover:bg-gray-200"
+          className={`rounded p-1 ${theme.iconBtn}`}
           title={
             sessionListCollapsed ? "セッション一覧を展開" : "セッション一覧を折りたたむ"
           }
@@ -219,21 +224,19 @@ export default function OpencodeChat({
           )}
         </button>
         <span
-          className="font-mono font-semibold tracking-tight text-slate-900"
+          className="font-mono font-semibold tracking-tight"
           style={{ fontSize: "1.25em" }}
           aria-label="opencode"
         >
-          <span className="text-slate-400">open</span>
-          <span className="text-slate-900">code</span>
+          <span className={theme.brandOpen}>open</span>
+          <span className={theme.brandCode}>code</span>
         </span>
-        <span className="text-gray-400" style={{ fontSize: "0.85em" }}>
+        <span className={theme.mutedText} style={{ fontSize: "0.85em" }}>
           チャット
         </span>
         <span
           className={`rounded px-1.5 py-0.5 ${
-            state.connected
-              ? "bg-emerald-100 text-emerald-700"
-              : "bg-gray-200 text-gray-600"
+            state.connected ? theme.connectedOn : theme.connectedOff
           }`}
           style={{ fontSize: "0.85em" }}
         >
@@ -241,23 +244,25 @@ export default function OpencodeChat({
         </span>
         {config && (
           <span
-            className="truncate text-gray-600"
+            className={`truncate ${theme.configCwdText}`}
             style={{ fontSize: "0.85em" }}
             title={`${config.providerID}/${config.modelID}`}
           >
-            <span className="text-gray-400">モデル:</span>{" "}
-            <span className="font-medium text-gray-800">{config.modelName}</span>
-            <span className="text-gray-400"> · {config.providerName}</span>
+            <span className={theme.configLabelText}>モデル:</span>{" "}
+            <span className={`font-medium ${theme.configModelText}`}>
+              {config.modelName}
+            </span>
+            <span className={theme.configLabelText}> · {config.providerName}</span>
           </span>
         )}
         {activating && (
-          <span className="text-gray-500" style={{ fontSize: "0.85em" }}>
+          <span className={theme.sidebarMutedSub} style={{ fontSize: "0.85em" }}>
             初期化中...
           </span>
         )}
         {activateError && (
           <span
-            className="text-red-600"
+            className={theme.errorText}
             style={{ fontSize: "0.85em" }}
             title={activateError}
           >
@@ -267,7 +272,7 @@ export default function OpencodeChat({
         <button
           type="button"
           onClick={() => void refreshSessions()}
-          className="ml-auto rounded p-1 text-gray-500 hover:bg-gray-200"
+          className={`ml-auto rounded p-1 ${theme.iconBtn}`}
           title="セッション一覧を再取得"
         >
           <RefreshCw style={{ width: "1.1em", height: "1.1em" }} />
@@ -283,6 +288,7 @@ export default function OpencodeChat({
             onSelect={setActiveId}
             onNew={onNewSession}
             onDelete={onDeleteSession}
+            theme={theme}
           />
         )}
         <section className="flex flex-1 flex-col overflow-hidden">
@@ -299,6 +305,7 @@ export default function OpencodeChat({
               activeId && busy ? () => void abortSession(activeId) : undefined
             }
             skills={skills}
+            theme={theme}
           />
         </section>
       </div>
@@ -313,6 +320,7 @@ function SessionList({
   onSelect,
   onNew,
   onDelete,
+  theme,
 }: {
   sessions: SessionInfo[];
   activeId: string | null;
@@ -320,23 +328,26 @@ function SessionList({
   onSelect: (id: string) => void;
   onNew: () => void | Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
+  theme: ChatTheme;
 }) {
   return (
     <aside
-      className="flex w-48 flex-none flex-col border-r border-gray-200 bg-gray-50"
+      className={`flex w-48 flex-none flex-col border-r ${theme.sidebarBorder} ${theme.sidebarBg}`}
       style={{ fontSize: "0.85em" }}
     >
       <button
         type="button"
         onClick={() => void onNew()}
-        className="flex items-center justify-center gap-1 border-b border-gray-200 bg-emerald-50 py-2 font-medium text-emerald-700 hover:bg-emerald-100"
+        className={`flex items-center justify-center gap-1 py-2 font-medium ${theme.newBtn}`}
       >
         <Plus style={{ width: "1.1em", height: "1.1em" }} />
         新規セッション
       </button>
       <ul className="flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
-          <li className="px-3 py-4 text-gray-400">セッションはありません</li>
+          <li className={`px-3 py-4 ${theme.sidebarEmpty}`}>
+            セッションはありません
+          </li>
         ) : (
           sessions.map((s) => {
             const busy = busyMap[s.id];
@@ -344,8 +355,8 @@ function SessionList({
             return (
               <li
                 key={s.id}
-                className={`group flex items-center gap-1 border-b border-gray-100 px-2 py-1.5 ${
-                  active ? "bg-emerald-100" : "hover:bg-white"
+                className={`group flex items-center gap-1 border-b ${theme.sidebarItemBorder} px-2 py-1.5 ${
+                  active ? theme.sidebarActive : theme.sidebarHover
                 }`}
               >
                 <button
@@ -358,7 +369,7 @@ function SessionList({
                     {s.title || "(無題)"}
                   </div>
                   <div
-                    className="truncate text-gray-500"
+                    className={`truncate ${theme.sidebarMutedSub}`}
                     style={{ fontSize: "0.85em" }}
                   >
                     {busy ? "● 応答中" : s.directory ?? ""}
@@ -371,7 +382,7 @@ function SessionList({
                   title="削除"
                 >
                   <Trash2
-                    className="text-gray-400 hover:text-red-600"
+                    className={theme.sidebarDangerBtn}
                     style={{ width: "1.1em", height: "1.1em" }}
                   />
                 </button>
@@ -395,6 +406,7 @@ function ChatThread({
   onSubmit,
   onAbort,
   skills,
+  theme,
 }: {
   sessionId: string | null;
   messages: { id: string; role: string; partIds: string[] }[];
@@ -406,6 +418,7 @@ function ChatThread({
   onSubmit: () => void | Promise<void>;
   onAbort?: () => void;
   skills: SkillSummary[];
+  theme: ChatTheme;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const totalChars = useMemo(
@@ -630,7 +643,9 @@ function ChatThread({
 
   if (!sessionId) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 text-center text-gray-500">
+      <div
+        className={`flex flex-1 items-center justify-center px-6 text-center ${theme.emptyText}`}
+      >
         左側からセッションを選ぶか「新規セッション」を押してください。
         <br />
         既存の Coding/Business パネル TUI で始めた会話もここから続きを書けます。
@@ -647,13 +662,11 @@ function ChatThread({
         <div
           key={g.key}
           className={`rounded-lg px-3 py-2 ${
-            g.role === "user"
-              ? "bg-gray-100"
-              : "border border-emerald-200 bg-emerald-50/40"
+            g.role === "user" ? theme.userBubble : theme.assistantBubble
           }`}
         >
           <div
-            className="mb-1 font-semibold uppercase tracking-wide text-gray-500"
+            className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
             style={{ fontSize: "0.7em" }}
           >
             {g.role === "user" ? "あなた" : "opencode"}
@@ -661,12 +674,18 @@ function ChatThread({
           {g.partIds.map(({ pid, messageId }) => {
             const p = parts[pid];
             if (!p) return null;
-            return <MessagePart key={`${messageId}:${pid}`} part={p} />;
+            return (
+              <MessagePart
+                key={`${messageId}:${pid}`}
+                part={p}
+                theme={theme}
+              />
+            );
           })}
         </div>
       ))}
       {busy && (
-        <div className="text-emerald-700" style={{ fontSize: "0.9em" }}>
+        <div className={theme.assistantAccent} style={{ fontSize: "0.9em" }}>
           ● 応答を生成中...
         </div>
       )}
@@ -679,21 +698,22 @@ function ChatThread({
         onAbort={onAbort}
         skills={skills}
         statusLine={statusLine}
+        theme={theme}
       />
     </div>
   );
 }
 
-function MessagePart({ part }: { part: PartInfo }) {
+function MessagePart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
   if (part.type === "reasoning") {
-    return <ReasoningPart part={part} />;
+    return <ReasoningPart part={part} theme={theme} />;
   }
   if (part.type === "text") {
     // prose は rem 固定 (0.875rem 等) を当てるので inherit で上書きして
     // 親からの em ベース (A-/A+) に連動させる。
     return (
       <div
-        className="prose max-w-none"
+        className={`prose max-w-none ${theme.proseExtra}`}
         style={{ fontSize: "inherit", lineHeight: 1.55 }}
       >
         <ReactMarkdown
@@ -713,7 +733,7 @@ function MessagePart({ part }: { part: PartInfo }) {
 // 翻訳は /api/opencode/translate の text/plain ストリームを逐次連結する。
 // 1 回翻訳した結果はキャッシュし、再度「日本語」タブを押しても再取得しない。
 // 思考ログがストリーム途中の場合は「再翻訳」で最新版に更新できる。
-function ReasoningPart({ part }: { part: PartInfo }) {
+function ReasoningPart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
   const [tab, setTab] = useState<"source" | "ja">("source");
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
@@ -780,10 +800,12 @@ function ReasoningPart({ part }: { part: PartInfo }) {
 
   return (
     <details
-      className="mb-2 rounded border border-gray-200 bg-white/70"
+      className={`mb-2 rounded ${theme.reasoningBorder}`}
       style={{ fontSize: "0.9em" }}
     >
-      <summary className="flex cursor-pointer select-none items-center gap-2 px-2 py-1 text-gray-500 hover:bg-gray-100">
+      <summary
+        className={`flex cursor-pointer select-none items-center gap-2 px-2 py-1 ${theme.reasoningSummary}`}
+      >
         <span>思考ログ ({part.text.length} 文字)</span>
         <span className="ml-auto flex items-center gap-1" style={{ fontSize: "0.9em" }}>
           <button
@@ -794,8 +816,8 @@ function ReasoningPart({ part }: { part: PartInfo }) {
             }}
             className={`rounded px-2 py-0.5 ${
               tab === "source"
-                ? "bg-gray-200 text-gray-800"
-                : "text-gray-500 hover:bg-gray-100"
+                ? theme.reasoningTabActive
+                : theme.reasoningTabInactive
             }`}
           >
             原文
@@ -808,8 +830,8 @@ function ReasoningPart({ part }: { part: PartInfo }) {
             }}
             className={`rounded px-2 py-0.5 ${
               tab === "ja"
-                ? "bg-emerald-100 text-emerald-800"
-                : "text-emerald-700 hover:bg-emerald-50"
+                ? theme.translateTabActive
+                : theme.translateTabInactive
             }`}
             title="AI 翻訳で日本語に変換 (llama-server)"
           >
@@ -819,7 +841,7 @@ function ReasoningPart({ part }: { part: PartInfo }) {
       </summary>
       {tab === "source" ? (
         <pre
-          className="whitespace-pre-wrap break-words px-3 py-2 font-mono leading-relaxed text-gray-700"
+          className={`whitespace-pre-wrap break-words px-3 py-2 font-mono leading-relaxed ${theme.reasoningBodyText}`}
           style={{ fontSize: "0.9em" }}
         >
           {part.text}
@@ -827,24 +849,30 @@ function ReasoningPart({ part }: { part: PartInfo }) {
       ) : (
         <div className="px-3 py-2" style={{ fontSize: "0.9em" }}>
           {error ? (
-            <div className="text-red-600">{error}</div>
+            <div className={theme.errorText}>{error}</div>
           ) : translation === "" && translating ? (
-            <div className="text-gray-500">● 翻訳中…</div>
+            <div className={theme.translatingText}>● 翻訳中…</div>
           ) : translation === "" ? (
-            <div className="text-gray-400">（未翻訳）</div>
+            <div className={theme.sidebarMutedMini}>（未翻訳）</div>
           ) : (
             <>
-              <pre className="whitespace-pre-wrap break-words leading-relaxed text-gray-800">
+              <pre
+                className={`whitespace-pre-wrap break-words leading-relaxed ${theme.translatedText}`}
+              >
                 {translation}
-                {translating && <span className="text-emerald-600"> ▌</span>}
+                {translating && (
+                  <span className={theme.translationCaretAccent}> ▌</span>
+                )}
               </pre>
               {stale && !translating && (
-                <div className="mt-2 flex items-center gap-2 text-gray-500">
+                <div
+                  className={`mt-2 flex items-center gap-2 ${theme.translatingText}`}
+                >
                   <span>思考ログが更新されています</span>
                   <button
                     type="button"
                     onClick={() => void runTranslate()}
-                    className="rounded bg-emerald-600 px-2 py-0.5 text-white hover:bg-emerald-500"
+                    className={`rounded px-2 py-0.5 ${theme.retranslateBtn}`}
                   >
                     再翻訳
                   </button>
@@ -870,6 +898,7 @@ function InlineComposer({
   onAbort,
   skills,
   statusLine,
+  theme,
 }: {
   disabled: boolean;
   busy: boolean;
@@ -879,6 +908,7 @@ function InlineComposer({
   onAbort?: () => void;
   skills: SkillSummary[];
   statusLine: string;
+  theme: ChatTheme;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [suggestIndex, setSuggestIndex] = useState(0);
@@ -922,7 +952,7 @@ function InlineComposer({
 
   return (
     <form
-      className="relative rounded-lg border border-emerald-300/60 bg-white shadow-sm focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-200"
+      className={`relative rounded-lg shadow-sm ${theme.composerWrap}`}
       onSubmit={(e) => {
         e.preventDefault();
         if (!disabled) void onSubmit();
@@ -930,11 +960,11 @@ function InlineComposer({
     >
       {showSuggest && (
         <div
-          className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+          className={`absolute bottom-full left-0 right-0 z-10 mb-1 max-h-56 overflow-y-auto rounded-md shadow-lg ${theme.suggestWrap}`}
           style={{ fontSize: "0.9em" }}
         >
           <div
-            className="border-b border-gray-100 bg-gray-50 px-2 py-1 text-gray-500"
+            className={`px-2 py-1 ${theme.suggestHeader}`}
             style={{ fontSize: "0.8em" }}
           >
             スキル (Tab / Enter で挿入、Esc で閉じる)
@@ -950,15 +980,15 @@ function InlineComposer({
                   }}
                   className={`block w-full px-3 py-1.5 text-left ${
                     i === suggestIndex
-                      ? "bg-emerald-50"
-                      : "hover:bg-gray-50"
+                      ? theme.suggestActive
+                      : theme.suggestHover
                   }`}
                 >
-                  <div className="font-mono font-medium text-emerald-700">
+                  <div className={`font-mono font-medium ${theme.suggestName}`}>
                     /{s.name}
                   </div>
                   <div
-                    className="truncate text-gray-500"
+                    className={`truncate ${theme.suggestDesc}`}
                     style={{ fontSize: "0.85em" }}
                   >
                     {s.description || "(説明なし)"}
@@ -970,7 +1000,7 @@ function InlineComposer({
         </div>
       )}
       <div
-        className="px-3 pt-2 font-semibold uppercase tracking-wide text-emerald-700"
+        className={`px-3 pt-2 font-semibold uppercase tracking-wide ${theme.composerLabel}`}
         style={{ fontSize: "0.7em" }}
       >
         あなた (下書き)
@@ -1012,15 +1042,15 @@ function InlineComposer({
         }}
         placeholder="メッセージを入力 (Enter で送信 / Shift+Enter で改行 /「/」でスキル)"
         disabled={disabled}
-        className="block w-full resize-none border-0 bg-transparent px-3 py-2 leading-relaxed placeholder:text-gray-400 focus:outline-none focus:ring-0 disabled:bg-transparent disabled:text-gray-400"
+        className={`block w-full resize-none border-0 bg-transparent px-3 py-2 leading-relaxed focus:outline-none focus:ring-0 ${theme.composerTextarea}`}
       />
       <div
-        className="flex items-center justify-between gap-2 border-t border-gray-100 px-3 py-1.5"
+        className={`flex items-center justify-between gap-2 px-3 py-1.5 ${theme.composerFooter}`}
         style={{ fontSize: "0.8em" }}
       >
         <span
           className={`truncate font-mono ${
-            busy ? "text-emerald-700" : "text-gray-500"
+            busy ? theme.composerBusyOn : theme.composerBusyOff
           }`}
           title="応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差し替え。コンテキストはセッション全文のトークン数と上限の比"
         >
@@ -1030,7 +1060,7 @@ function InlineComposer({
           <button
             type="button"
             onClick={onAbort}
-            className="flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-3 py-1 font-medium text-white hover:bg-red-500"
+            className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1 font-medium ${theme.abortBtn}`}
             title="生成を停止"
           >
             <Square style={{ width: "1em", height: "1em" }} />
@@ -1040,7 +1070,7 @@ function InlineComposer({
           <button
             type="submit"
             disabled={disabled || busy || value.trim().length === 0}
-            className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-500 disabled:bg-gray-300"
+            className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1 font-medium ${theme.sendBtn}`}
           >
             <Send style={{ width: "1em", height: "1em" }} />
             送信

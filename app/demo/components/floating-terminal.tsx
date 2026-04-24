@@ -32,9 +32,6 @@ const OpencodeSkills = dynamic(() => import("./opencode-skills"), {
   ssr: false,
 });
 const BusinessHelp = dynamic(() => import("./business-help"), { ssr: false });
-const OpencodeHintOverlay = dynamic(() => import("./opencode-hint-overlay"), {
-  ssr: false,
-});
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -208,12 +205,14 @@ export default function FloatingTerminal({
   const top = (scenePos.y + view.y) * view.zoom;
 
   // variant ごとの表裏:
-  // - coding: 表面 = opencode TUI (xterm), 裏面 = shell (xterm)
-  // - business: 表面 = opencode チャット UI (React), 裏面 = RAG ドキュメント
+  // - coding: 表面 = opencode チャット UI (React), 裏面 = shell (xterm) ※PR 3 で 3 タブ化予定
+  // - business: 表面 = opencode チャット UI (React), 裏面 = BackTabsPanel (RAG/スキル/ヘルプ)
   // - ubuntu: 表面 = shell (xterm), 裏面なし
   const frontCmd: "opencode" | "shell" = variant === "ubuntu" ? "shell" : "opencode";
   const backAvailable = variant !== "ubuntu";
   const isBusiness = variant === "business";
+  // 表面が React チャット (OpencodeChat) のパネル。Coding と Business が該当。
+  const isChatFront = variant === "business" || variant === "coding";
 
   const headerBar = (title: string) => (
     <div
@@ -329,20 +328,22 @@ export default function FloatingTerminal({
             backgroundColor: style.panelBg,
           }}
         >
-          {headerBar(isBusiness ? `${style.label} — チャット` : style.label)}
+          {headerBar(isChatFront ? `${style.label} — チャット` : style.label)}
           {!minimized && (
             <div
               className={`relative flex-1 overflow-hidden rounded-b-lg ${
                 isBusiness ? "bg-white" : "bg-[#0b0b0f]"
               }`}
-              // Business は React チャット (白ベース) なので CSS filter は当てない。
-              // Coding/Ubuntu は XtermView ベースなのでテーマカラー用の filter を適用。
+              // Ubuntu (xterm) だけテーマカラー用 CSS filter を掛ける。
+              // Business/Coding の React チャットは filter なしで rootBg が直接効く。
               style={
-                !isBusiness && style.filter ? { filter: style.filter } : undefined
+                variant === "ubuntu" && style.filter
+                  ? { filter: style.filter }
+                  : undefined
               }
             >
-              {isBusiness ? (
-                <OpencodeChat fontSize={fontSize} />
+              {isChatFront ? (
+                <OpencodeChat fontSize={fontSize} variant={variant} />
               ) : session ? (
                 <XtermView
                   key={`${session.nonce}-${fontSize}-front`}
@@ -367,11 +368,6 @@ export default function FloatingTerminal({
                 }}
               />
             </div>
-          )}
-          {/* 初回ガイドは Coding の xterm TUI に対してのみ有効。Business は
-              React チャット UI なのでヒントは不要。 */}
-          {!minimized && variant === "coding" && (
-            <OpencodeHintOverlay variant={variant} />
           )}
         </div>
 
