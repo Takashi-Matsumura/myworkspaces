@@ -6,7 +6,16 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { PanelLeftClose, PanelLeftOpen, RefreshCw, Sparkles, Bug, Plus } from "lucide-react";
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
+  Sparkles,
+  Bug,
+  Plus,
+  ClipboardList,
+  Hammer,
+} from "lucide-react";
 import {
   useOpencodeStream,
   type PartInfo,
@@ -106,6 +115,7 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [agent, setAgent] = useState<"plan" | "build">("build");
   const [activating, setActivating] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
@@ -191,12 +201,15 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
     setSending(true);
     try {
       const expanded = expandSlashCommand(text, skills);
-      const ok = await sendPrompt(activeId, expanded, { variant: "coding" });
+      const ok = await sendPrompt(activeId, expanded, {
+        variant: "coding",
+        agent,
+      });
       if (ok) setInput("");
     } finally {
       setSending(false);
     }
-  }, [input, activeId, sendPrompt, skills]);
+  }, [input, activeId, sendPrompt, skills, agent]);
 
   const applyTemplate = useCallback((template: string) => {
     setInput(template);
@@ -458,6 +471,42 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
       <div
         className={`flex-none border-t ${theme.headerBorder} ${theme.headerBg} px-3 py-2`}
       >
+        {/* Plan / Build 切替 (opencode 組み込みエージェント)。Plan は
+            .opencode/plans/*.md のみ編集許可で通常ファイルは書かない設計 */}
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-[10px] text-white/40">モード:</span>
+          <div className="inline-flex overflow-hidden rounded border border-white/10">
+            <button
+              type="button"
+              onClick={() => setAgent("plan")}
+              disabled={sending}
+              title="Plan: 計画書 (.opencode/plans/*.md) だけを書き、実ファイルには手を入れない"
+              className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40 ${
+                agent === "plan"
+                  ? "bg-sky-500/25 text-sky-200"
+                  : "text-white/60 hover:bg-white/5 hover:text-white/90"
+              }`}
+            >
+              <ClipboardList className="h-3 w-3" />
+              Plan
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgent("build")}
+              disabled={sending}
+              title="Build: 実ファイルを編集して動作するコードまで書ききる (デフォルト)"
+              className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40 ${
+                agent === "build"
+                  ? "bg-emerald-500/25 text-emerald-200"
+                  : "text-white/60 hover:bg-white/5 hover:text-white/90"
+              }`}
+            >
+              <Hammer className="h-3 w-3" />
+              Build
+            </button>
+          </div>
+        </div>
+
         {/* クイックテンプレート: 入力欄に計画→実装→検証の雛形を展開 */}
         <div className="mb-2 flex flex-wrap items-center gap-1">
           <span className="text-[10px] text-white/40">テンプレ:</span>
