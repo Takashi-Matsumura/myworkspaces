@@ -280,7 +280,7 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
           <span
             className={`hidden truncate rounded px-2 py-0.5 sm:inline-block ${CODING_THEME.headerStatBadge}`}
             style={{ fontSize: "0.8em" }}
-            title={statusLine}
+            title={`${statusLine}\n\n応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差替。コンテキストはセッション全文のトークン数と上限の比。`}
           >
             {statusLine}
           </span>
@@ -297,31 +297,38 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
 
       {/* メイン (活動フィード + ドロワー) */}
       <main className="relative flex flex-1 overflow-hidden">
-        {sessionDrawerOpen && (
-          <>
-            {/* 背景クリックで閉じる透過オーバーレイ */}
-            <div
-              className="absolute inset-0 z-10"
-              onClick={() => setSessionDrawerOpen(false)}
-            />
-            <div
-              className={`absolute inset-y-0 left-0 z-20 w-48 ${CODING_THEME.drawerBg} ${CODING_THEME.drawerShadow}`}
-            >
-              <SessionList
-                sessions={state.sessions}
-                activeId={activeId}
-                busyMap={state.busyBySession}
-                onSelect={(id) => {
-                  setActiveId(id);
-                  setSessionDrawerOpen(false);
-                }}
-                onNew={onNewSession}
-                onDelete={onDeleteSession}
-                theme={theme}
-              />
-            </div>
-          </>
-        )}
+        {/* 背景クリックで閉じる透過オーバーレイ (開時のみクリック有効) */}
+        <div
+          className={`absolute inset-0 z-10 bg-black/20 transition-opacity duration-200 ${
+            sessionDrawerOpen
+              ? "opacity-100"
+              : "pointer-events-none opacity-0"
+          }`}
+          onClick={() => setSessionDrawerOpen(false)}
+          aria-hidden="true"
+        />
+        {/* ドロワー: 常に DOM に存在し translate-x で出し入れ */}
+        <div
+          className={`absolute inset-y-0 left-0 z-20 w-48 transition-transform duration-200 ease-out ${
+            CODING_THEME.drawerBg
+          } ${CODING_THEME.drawerShadow} ${
+            sessionDrawerOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+          aria-hidden={!sessionDrawerOpen}
+        >
+          <SessionList
+            sessions={state.sessions}
+            activeId={activeId}
+            busyMap={state.busyBySession}
+            onSelect={(id) => {
+              setActiveId(id);
+              setSessionDrawerOpen(false);
+            }}
+            onNew={onNewSession}
+            onDelete={onDeleteSession}
+            theme={theme}
+          />
+        </div>
 
         <div
           ref={scrollRef}
@@ -329,12 +336,15 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
         >
           {!activeId ? (
             <div
-              className={`flex flex-1 items-center justify-center text-center ${theme.emptyText}`}
+              className={`flex flex-1 items-center justify-center px-6 ${theme.emptyText}`}
             >
-              左上の <PanelLeftOpen className="inline h-4 w-4" /> から
-              セッションを選ぶか「新規セッション」で開始してください。
-              <br />
-              既存の Business パネル / opencode TUI で始めた会話もここから続きを書けます。
+              <p className="max-w-md text-center leading-relaxed">
+                左上の
+                <PanelLeftOpen className="mx-1 inline-block h-[1em] w-[1em] align-[-0.15em]" />
+                からセッションを選ぶか「新規セッション」で開始してください。
+                <br />
+                既存の Business パネル / opencode TUI で始めた会話もここから続きを書けます。
+              </p>
             </div>
           ) : (
             groups.map((g) => (

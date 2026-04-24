@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { Highlight, themes } from "prism-react-renderer";
+import { Check, Copy } from "lucide-react";
 
 // CodingConsole / ActionCard で使うシンタックスハイライト付きコードブロック。
 // prism-react-renderer の vsDark を固定し、背景は透過にして親カードの bg を
 // そのまま見せる (枠は親が持つ想定)。Business 側では使わないため light 対応は不要。
+// hover で右上にコピーボタンを表示。
 export function CodeBlock({
   language,
   code,
@@ -14,21 +17,48 @@ export function CodeBlock({
 }) {
   // 末尾改行は <pre> の空行を増やすだけなので事前に除去
   const normalized = code.replace(/\n+$/, "");
+  const [copied, setCopied] = useState(false);
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(normalized);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard API が使えない環境では何もしない */
+    }
+  };
+
   return (
     <Highlight code={normalized} language={language} theme={themes.vsDark}>
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
-        <pre
-          className={`overflow-x-auto px-3 py-2 leading-relaxed ${className}`}
-          style={{ ...style, background: "transparent", fontSize: "0.9em" }}
-        >
-          {tokens.map((line, i) => (
-            <div key={i} {...getLineProps({ line })}>
-              {line.map((token, key) => (
-                <span key={key} {...getTokenProps({ token })} />
-              ))}
-            </div>
-          ))}
-        </pre>
+        <div className="group relative">
+          <pre
+            className={`overflow-x-auto px-3 py-2 leading-relaxed ${className}`}
+            style={{ ...style, background: "transparent", fontSize: "0.9em" }}
+          >
+            {tokens.map((line, i) => (
+              <div key={i} {...getLineProps({ line })}>
+                {line.map((token, key) => (
+                  <span key={key} {...getTokenProps({ token })} />
+                ))}
+              </div>
+            ))}
+          </pre>
+          <button
+            type="button"
+            onClick={onCopy}
+            className="absolute right-1.5 top-1.5 rounded border border-white/10 bg-white/5 p-1 text-white/60 opacity-0 transition-opacity hover:bg-white/10 hover:text-white/90 focus-visible:opacity-100 group-hover:opacity-100"
+            title={copied ? "コピーしました" : "コピー"}
+            aria-label="コードをコピー"
+          >
+            {copied ? (
+              <Check style={{ width: "0.9em", height: "0.9em" }} />
+            ) : (
+              <Copy style={{ width: "0.9em", height: "0.9em" }} />
+            )}
+          </button>
+        </div>
       )}
     </Highlight>
   );
