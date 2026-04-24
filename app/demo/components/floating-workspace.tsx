@@ -20,6 +20,7 @@ import {
   X,
   Plus,
   Upload,
+  Download,
   Settings,
   ArrowLeft,
 } from "lucide-react";
@@ -838,6 +839,27 @@ export default function FloatingWorkspace({
           title="Refresh"
         >
           <RefreshCw className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!workspace) return;
+            // ZIP のダウンロードは <a download> で普通の GET navigation に。
+            // Content-Disposition: attachment + filename* で UTF-8 ファイル名を
+            // 渡すので、日本語を含んでいてもブラウザが正しく保存名にしてくれる。
+            const url = `/api/workspace/download?workspaceId=${encodeURIComponent(workspace.id)}`;
+            const a = document.createElement("a");
+            a.href = url;
+            a.rel = "noopener";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }}
+          disabled={!workspace}
+          className="inline-flex shrink-0 items-center rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:opacity-30"
+          title="ワークスペースを ZIP でダウンロード (Windows 互換 UTF-8)"
+        >
+          <Download className="h-3.5 w-3.5" />
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button
