@@ -100,6 +100,7 @@ export function buildOpencodeJson(settings: UserSettings): string {
     "vision-rules.md",
     "business-rules.md",
     "pdf-rules.md",
+    "coding-rules.md",
   ];
 
   if (s.provider === "llama-server") {

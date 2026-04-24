@@ -87,6 +87,9 @@ export default function SettingsPanel({
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
   const [networkBusy, setNetworkBusy] = useState(false);
 
+  const [rulesSyncing, setRulesSyncing] = useState(false);
+  const [rulesSyncResult, setRulesSyncResult] = useState<string | null>(null);
+
   const loadSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
@@ -208,6 +211,43 @@ export default function SettingsPanel({
       setSaving(false);
     }
   }, [settings]);
+
+  const syncAllRules = useCallback(async () => {
+    if (rulesSyncing) return;
+    setRulesSyncing(true);
+    setRulesSyncResult(null);
+    setError(null);
+    try {
+      const listRes = await fetch("/api/user/workspaces", { cache: "no-store" });
+      if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
+      const { workspaces } = (await listRes.json()) as {
+        workspaces: { id: string; label: string }[];
+      };
+      if (!workspaces.length) {
+        setRulesSyncResult("対象ワークスペースなし");
+        return;
+      }
+      let ok = 0;
+      let fail = 0;
+      for (const ws of workspaces) {
+        const res = await fetch(
+          `/api/user/workspaces/${encodeURIComponent(ws.id)}/sync-rules`,
+          { method: "POST" },
+        );
+        if (res.ok) ok += 1;
+        else fail += 1;
+      }
+      setRulesSyncResult(
+        fail === 0
+          ? `${ok}/${workspaces.length} 件すべて同期しました`
+          : `成功 ${ok} 件 / 失敗 ${fail} 件`,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRulesSyncing(false);
+    }
+  }, [rulesSyncing]);
 
   const handleReset = useCallback(async () => {
     if (containerBusy) return;
@@ -346,6 +386,29 @@ export default function SettingsPanel({
                 </p>
               </div>
             )}
+
+            <div className="mt-2 rounded border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-1 text-xs font-medium text-slate-700">ルールファイルの同期</div>
+              <p className="mb-2 text-[11px] leading-relaxed text-slate-600">
+                テンプレートの <code>*-rules.md</code>（language / vision / business / pdf / coding）を
+                既存の全ワークスペースに上書き配布し、<code>opencode.json</code> の
+                <code>instructions</code> にも不足分を追加します。
+              </p>
+              <button
+                type="button"
+                onClick={() => void syncAllRules()}
+                disabled={rulesSyncing}
+                className="inline-flex items-center gap-1 rounded border border-sky-300 bg-white px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${rulesSyncing ? "animate-spin" : ""}`} />
+                {rulesSyncing ? "同期中…" : "ルールを最新テンプレートに同期"}
+              </button>
+              {rulesSyncResult && (
+                <div className="mt-2 font-mono text-[11px] text-emerald-700">
+                  {rulesSyncResult}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

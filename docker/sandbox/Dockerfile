@@ -125,6 +125,7 @@ COPY templates/language-rules.md /opt/myworkspaces/templates/
 COPY templates/vision-rules.md /opt/myworkspaces/templates/
 COPY templates/business-rules.md /opt/myworkspaces/templates/
 COPY templates/pdf-rules.md /opt/myworkspaces/templates/
+COPY templates/coding-rules.md /opt/myworkspaces/templates/
 COPY templates/opencode.json /opt/myworkspaces/templates/
 
 WORKDIR /root
