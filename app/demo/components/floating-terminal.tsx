@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useMemo,
   useRef,
   useState,
   type PointerEvent,
@@ -16,6 +17,7 @@ import {
   FileText,
   Wand2,
   HelpCircle,
+  TerminalSquare,
 } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 import type { BackTab } from "./back-tabs-panel";
@@ -32,6 +34,7 @@ const OpencodeSkills = dynamic(() => import("./opencode-skills"), {
   ssr: false,
 });
 const BusinessHelp = dynamic(() => import("./business-help"), { ssr: false });
+const CodingHelp = dynamic(() => import("./coding-help"), { ssr: false });
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -214,6 +217,46 @@ export default function FloatingTerminal({
   // 表面が React チャット (OpencodeChat) のパネル。Coding と Business が該当。
   const isChatFront = variant === "business" || variant === "coding";
 
+  // Coding 裏面タブ構成。session と backNonce に依存するため関数内で組む。
+  // Bash タブの pty は「フリップ済み (backNonce > 0) かつ Bash タブ active」
+  // のときだけマウントされる — 裏面を見てすらいないのに pty を張らないよう、
+  // 初期 active は "help" に固定して、ユーザが Bash タブを押した瞬間起動する。
+  const codingTabs = useMemo<BackTab[]>(
+    () => [
+      {
+        key: "bash",
+        label: "Bash",
+        icon: <TerminalSquare style={iconClass} />,
+        render: ({ fontSize }) =>
+          backNonce > 0 && session ? (
+            <XtermView
+              key={`${backNonce}-${fontSize}-back`}
+              cwd={session.cwd}
+              cmd="shell"
+              fontSize={fontSize}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
+              シェル (bash) を起動するにはフリップしてください
+            </div>
+          ),
+      },
+      {
+        key: "help",
+        label: "ヘルプ",
+        icon: <HelpCircle style={iconClass} />,
+        render: ({ fontSize }) => <CodingHelp fontSize={fontSize} />,
+      },
+      {
+        key: "skills",
+        label: "スキル",
+        icon: <Wand2 style={iconClass} />,
+        render: ({ fontSize }) => <OpencodeSkills fontSize={fontSize} />,
+      },
+    ],
+    [backNonce, session],
+  );
+
   const headerBar = (title: string) => (
     <div
       className={`flex h-9 cursor-grab items-center gap-2 rounded-t-lg border-b px-3 text-xs active:cursor-grabbing select-none ${style.headerBorder} ${style.headerBg} ${style.headerText}`}
@@ -387,7 +430,7 @@ export default function FloatingTerminal({
             {headerBar(
               isBusiness
                 ? `${style.label} — RAG / スキル / ヘルプ`
-                : `${style.label} — shell`,
+                : `${style.label} — Bash / ヘルプ / スキル`,
             )}
             {!minimized && (
               <div
@@ -401,17 +444,13 @@ export default function FloatingTerminal({
                     variant="business"
                     fontSize={fontSize}
                   />
-                ) : backNonce > 0 && session ? (
-                  <XtermView
-                    key={`${backNonce}-${fontSize}-back`}
-                    cwd={session.cwd}
-                    cmd="shell"
-                    fontSize={fontSize}
-                  />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
-                    シェル (bash) を起動するにはフリップしてください
-                  </div>
+                  <BackTabsPanel
+                    tabs={codingTabs}
+                    variant="coding"
+                    fontSize={fontSize}
+                    initialTab="help"
+                  />
                 )}
                 <div
                   className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
