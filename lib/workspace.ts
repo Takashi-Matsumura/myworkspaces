@@ -10,6 +10,16 @@ const TEMPLATE_DIR = "/opt/myworkspaces/templates";
 const MAX_READ_BYTES = 512 * 1024; // 512KB
 const MAX_LIST_ENTRIES = 2000;
 
+// opencode.json の instructions に含めたいテンプレ管理のルールファイル。
+// syncTemplateRules / createWorkspaceDirectory の両方がこのリストを参照する。
+const TEMPLATE_RULES = [
+  "language-rules.md",
+  "vision-rules.md",
+  "business-rules.md",
+  "pdf-rules.md",
+  "coding-rules.md",
+];
+
 export type DirEntry = {
   name: string;
   isDir: boolean;
@@ -138,6 +148,7 @@ export async function createWorkspaceDirectory(
     `cp -n ${TEMPLATE_DIR}/vision-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/business-rules.md ${cwd}/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/pdf-rules.md ${cwd}/ 2>/dev/null || true`,
+    `cp -n ${TEMPLATE_DIR}/coding-rules.md ${cwd}/ 2>/dev/null || true`,
   ].join(" && ");
 
   const res = await execCollect(sub, ["/bin/bash", "-c", script]);
@@ -162,6 +173,61 @@ export async function createWorkspaceDirectory(
       `cp -n ${TEMPLATE_DIR}/opencode.json ${cwd}/ 2>/dev/null || true`,
     ]);
   }
+}
+
+// 既存ワークスペースにテンプレートのルールファイルを再配布する。
+// - テンプレ管理の .md は上書きコピー (ユーザーが直接編集していないことを前提)
+// - opencode.json の instructions 配列に不足しているテンプレルールを追加 (既存要素は保持)
+// - opencode.json が無い / parse できない場合はルール追加をスキップ (.md のコピーは行う)
+export async function syncTemplateRules(
+  sub: string,
+  id: string,
+): Promise<{ copiedFiles: string[]; instructionsAdded: string[] }> {
+  const cwdPath = workspaceCwd(id);
+  const cwd = shellQuote(cwdPath);
+
+  // .md を上書きコピー (存在しなくても cp は -f 同等で新規作成する)
+  const script = TEMPLATE_RULES.map(
+    (f) => `cp ${TEMPLATE_DIR}/${f} ${cwd}/ 2>/dev/null || true`,
+  ).join(" && ");
+  const cpRes = await execCollect(sub, ["/bin/bash", "-c", script]);
+  if (cpRes.exitCode !== 0) {
+    throw new WorkspaceError(
+      `syncTemplateRules cp failed: ${cpRes.stderr.toString("utf-8")}`,
+      500,
+    );
+  }
+
+  // instructions を merge
+  const opencodePath = `${cwdPath}/opencode.json`;
+  const instructionsAdded: string[] = [];
+  try {
+    const payload = await readFile(sub, opencodePath);
+    const json = JSON.parse(payload.content) as {
+      instructions?: unknown;
+      [k: string]: unknown;
+    };
+    const current = Array.isArray(json.instructions)
+      ? (json.instructions as unknown[]).filter((v): v is string => typeof v === "string")
+      : [];
+    const currentSet = new Set(current);
+    const merged = [...current];
+    for (const rule of TEMPLATE_RULES) {
+      if (!currentSet.has(rule)) {
+        merged.push(rule);
+        instructionsAdded.push(rule);
+      }
+    }
+    if (instructionsAdded.length > 0) {
+      json.instructions = merged;
+      const next = JSON.stringify(json, null, 2) + "\n";
+      await writeFileInContainer(sub, opencodePath, Buffer.from(next, "utf-8"));
+    }
+  } catch (err) {
+    console.warn("[workspace] syncTemplateRules: skipped opencode.json merge", err);
+  }
+
+  return { copiedFiles: [...TEMPLATE_RULES], instructionsAdded };
 }
 
 export async function removeWorkspaceDirectory(
