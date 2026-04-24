@@ -453,12 +453,16 @@ export function useOpencodeStream() {
     async (
       sessionId: string,
       text: string,
-      opts?: { variant?: "coding" | "business" },
+      opts?: {
+        variant?: "coding" | "business";
+        agent?: "plan" | "build";
+      },
     ): Promise<boolean> => {
       const body: Record<string, unknown> = {
         parts: [{ type: "text", text }],
       };
       if (opts?.variant) body.variant = opts.variant;
+      if (opts?.agent) body.agent = opts.agent;
       const resp = await fetch(
         `/api/opencode/sessions/${encodeURIComponent(sessionId)}/prompt`,
         {
