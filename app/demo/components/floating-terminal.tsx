@@ -26,6 +26,9 @@ const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
 // Business パネルは 表面=opencode チャット / 裏面=BackTabsPanel (RAG/スキル/ヘルプ)。
 // Coding/Ubuntu パネルは従来どおり XtermView ベース。
 const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
+const CodingConsole = dynamic(() => import("./coding-console"), {
+  ssr: false,
+});
 const BackTabsPanel = dynamic(() => import("./back-tabs-panel"), {
   ssr: false,
 });
@@ -390,7 +393,11 @@ export default function FloatingTerminal({
               }
             >
               {isChatFront ? (
-                <OpencodeChat fontSize={fontSize} variant={variant} />
+                variant === "coding" ? (
+                  <CodingConsole fontSize={fontSize} />
+                ) : (
+                  <OpencodeChat fontSize={fontSize} variant={variant} />
+                )
               ) : session ? (
                 <XtermView
                   key={`${session.nonce}-${fontSize}-front`}

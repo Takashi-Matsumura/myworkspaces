@@ -52,8 +52,12 @@ export type PartInfo = {
   id: string;
   messageID: string;
   sessionID: string;
-  type: string; // "text" | "reasoning" | "step-start" | "step-finish" | ...
+  type: string; // "text" | "reasoning" | "step-start" | "step-finish" | "tool" | ...
   text: string; // delta で追記される
+  // tool/step 等の追加フィールド (tool名・input・output・state 等) を
+  // そのまま保持する。UI 側で parseToolPart により解釈する。
+  // opencode 1.14.x の具体スキーマは実機観察で補完する。
+  raw?: Record<string, unknown>;
 };
 
 type State = {
@@ -280,16 +284,21 @@ function applySseMessage(raw: string, dispatch: (a: Action) => void): void {
       return;
     }
     case "message.part.updated": {
-      const part = p.part as PartInfo | undefined;
+      const part = p.part as (PartInfo & Record<string, unknown>) | undefined;
       if (part?.id && part.messageID && part.sessionID) {
+        // id/messageID/sessionID/type/text 以外のフィールドは raw に退避し、
+        // tool / step-start / step-finish の解釈に使う (parseToolPart 側)。
+        const { id, messageID, sessionID, type, text, ...rest } = part;
+        const raw = Object.keys(rest).length > 0 ? rest : undefined;
         dispatch({
           type: "part/updated",
           part: {
-            id: part.id,
-            messageID: part.messageID,
-            sessionID: part.sessionID,
-            type: part.type ?? "text",
-            text: part.text ?? "",
+            id,
+            messageID,
+            sessionID,
+            type: type ?? "text",
+            text: text ?? "",
+            raw,
           },
         });
       }
