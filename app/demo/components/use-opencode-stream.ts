@@ -450,13 +450,21 @@ export function useOpencodeStream() {
   }, []);
 
   const sendPrompt = useCallback(
-    async (sessionId: string, text: string): Promise<boolean> => {
+    async (
+      sessionId: string,
+      text: string,
+      opts?: { variant?: "coding" | "business" },
+    ): Promise<boolean> => {
+      const body: Record<string, unknown> = {
+        parts: [{ type: "text", text }],
+      };
+      if (opts?.variant) body.variant = opts.variant;
       const resp = await fetch(
         `/api/opencode/sessions/${encodeURIComponent(sessionId)}/prompt`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ parts: [{ type: "text", text }] }),
+          body: JSON.stringify(body),
         },
       );
       return resp.ok;

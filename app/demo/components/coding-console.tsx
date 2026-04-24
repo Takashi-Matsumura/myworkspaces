@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, RefreshCw, Sparkles, Bug, Plus } from "lucide-react";
 import {
   useOpencodeStream,
   type PartInfo,
@@ -24,6 +24,66 @@ import {
 import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
+
+// 入力欄上部のクイックテンプレート。小さいモデルでも「計画 → 実装 → 検証」の
+// 手順を踏みやすいように、ツール名 (write / edit / bash) を明示的に指示する。
+// 最後に「=== ユーザーの要求 ===」以降の空行にユーザーが具体内容を書く。
+const CODING_TEMPLATES: {
+  id: "new" | "fix" | "add";
+  label: string;
+  icon: typeof Sparkles;
+  template: string;
+}[] = [
+  {
+    id: "new",
+    label: "新規アプリ",
+    icon: Sparkles,
+    template: `以下の手順で実装してください。
+
+1. 計画: どのファイルを作るか、何のパッケージが必要かを先に箇条書きで整理する
+2. 依存: \`bash\` ツールで必要なパッケージを事前にインストール (pip install / npm install 等)
+3. 実装: \`write\` ツールに {path, content} を渡してファイルを書き込む
+   - pass / TODO / 「実際には〜」のような未実装スタブは残さない
+   - main.py と他モジュールの循環 import は禁止
+4. 検証: \`bash\` ツールで起動コマンドを実行し、例外なく走ることを確認
+5. 完了宣言は検証が通ってからのみ行う
+
+=== ユーザーの要求 ===
+
+`,
+  },
+  {
+    id: "fix",
+    label: "バグ修正",
+    icon: Bug,
+    template: `以下のバグを修正してください。
+
+1. 調査: \`read\` ツールで該当ファイルを読み、問題箇所を特定する
+2. 修正: \`edit\` ツールに {path, old_string, new_string} を渡して直す
+3. 検証: \`bash\` ツールで再現コマンドを実行し、エラーが解消したことを確認
+4. 検証が通るまで完了宣言しない
+
+=== バグの内容 ===
+
+`,
+  },
+  {
+    id: "add",
+    label: "機能追加",
+    icon: Plus,
+    template: `既存のコードに以下の機能を追加してください。
+
+1. 現状把握: \`read\` ツールで関連ファイルを読み、既存コードの構造を把握する
+2. 影響範囲: 変更ファイルを整理する (新規ファイルより既存ファイルの編集を優先)
+3. 実装: \`edit\` ツールで変更を加える。既存の動作を壊さない
+4. 検証: \`bash\` ツールで動作確認コマンドを実行
+5. 検証が通るまで完了宣言しない
+
+=== 追加したい機能 ===
+
+`,
+  },
+];
 
 // Coding パネル表面の「Claude Code CLI 風 上下分割 UI」トップレベル。
 // OpencodeChat (Business 用) とは別コンポーネントだが、SSE / 状態管理 / 入力
@@ -131,12 +191,16 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
     setSending(true);
     try {
       const expanded = expandSlashCommand(text, skills);
-      const ok = await sendPrompt(activeId, expanded);
+      const ok = await sendPrompt(activeId, expanded, { variant: "coding" });
       if (ok) setInput("");
     } finally {
       setSending(false);
     }
   }, [input, activeId, sendPrompt, skills]);
+
+  const applyTemplate = useCallback((template: string) => {
+    setInput(template);
+  }, []);
 
   const onNewSession = useCallback(async () => {
     const s = await createSession();
@@ -394,6 +458,26 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
       <div
         className={`flex-none border-t ${theme.headerBorder} ${theme.headerBg} px-3 py-2`}
       >
+        {/* クイックテンプレート: 入力欄に計画→実装→検証の雛形を展開 */}
+        <div className="mb-2 flex flex-wrap items-center gap-1">
+          <span className="text-[10px] text-white/40">テンプレ:</span>
+          {CODING_TEMPLATES.map((tpl) => {
+            const Icon = tpl.icon;
+            return (
+              <button
+                key={tpl.id}
+                type="button"
+                onClick={() => applyTemplate(tpl.template)}
+                disabled={sending || !activeId}
+                title={`${tpl.label}テンプレを入力欄に展開`}
+                className="inline-flex items-center gap-1 rounded border border-white/10 px-2 py-0.5 text-[11px] text-white/70 transition-colors hover:bg-white/5 hover:text-white/90 disabled:opacity-40"
+              >
+                <Icon className="h-3 w-3" />
+                {tpl.label}
+              </button>
+            );
+          })}
+        </div>
         <InlineComposer
           disabled={sending || !activeId}
           busy={busy}
