@@ -7,7 +7,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/user/workspaces/{id}/sync-rules
-// テンプレートのルール .md を最新版で上書き + opencode.json の instructions にマージ挿入
+// テンプレートのルール .md を最新版で上書き +
+// opencode.json の instructions / agent.<name> にテンプレデフォルトをマージ挿入
+// (既存ユーザー設定は保持)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
