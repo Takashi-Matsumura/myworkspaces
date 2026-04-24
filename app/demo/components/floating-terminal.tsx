@@ -94,7 +94,9 @@ const businessTabs: BackTab[] = [
     key: "skills",
     label: "スキル",
     icon: <Wand2 style={iconClass} />,
-    render: ({ fontSize }) => <OpencodeSkills fontSize={fontSize} />,
+    render: ({ fontSize }) => (
+      <OpencodeSkills fontSize={fontSize} variant="business" />
+    ),
   },
   {
     key: "help",
@@ -251,7 +253,9 @@ export default function FloatingTerminal({
         key: "skills",
         label: "スキル",
         icon: <Wand2 style={iconClass} />,
-        render: ({ fontSize }) => <OpencodeSkills fontSize={fontSize} />,
+        render: ({ fontSize }) => (
+          <OpencodeSkills fontSize={fontSize} variant="coding" />
+        ),
       },
     ],
     [backNonce, session],
