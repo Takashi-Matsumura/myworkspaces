@@ -21,6 +21,7 @@ import {
   type SessionInfo,
 } from "./use-opencode-stream";
 import { CHAT_THEMES, type ChatTheme, type ChatVariant } from "./chat-theme";
+import { useStreamStats } from "./use-stream-stats";
 
 export type SkillSummary = {
   name: string;
@@ -30,7 +31,7 @@ export type SkillSummary = {
 // 入力の先頭が `/<name> ...` でその name が登録済みスキルにマッチしたら、
 // opencode 側でスキル選択が確実に走るよう prompt を wrap する。
 // マッチしない場合は原文のまま送る (スラッシュ付き文章を送りたい人の道を塞がない)。
-function expandSlashCommand(text: string, skills: SkillSummary[]): string {
+export function expandSlashCommand(text: string, skills: SkillSummary[]): string {
   const m = text.match(/^\/([a-z0-9][a-z0-9_-]{0,62})(?:\s+([\s\S]*))?$/);
   if (!m) return text;
   const sname = m[1];
@@ -313,7 +314,7 @@ export default function OpencodeChat({
   );
 }
 
-function SessionList({
+export function SessionList({
   sessions,
   activeId,
   busyMap,
@@ -447,177 +448,9 @@ function ChatThread({
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [totalChars, busy, input]);
 
-  // --- ストリーミング指標 -------------------------------------------------
-  // 文字数を live 集計しつつ、応答完了時に llama-server の /tokenize を叩いて
-  // 実トークン数に置き換える。tokens/秒 とコンテキスト利用率を表示する。
-  const busyStartRef = useRef<{ at: number; chars: number } | null>(null);
-  const [lastRun, setLastRun] = useState<{
-    chars: number;
-    seconds: number;
-    tokens: number | null; // /tokenize で確定したら埋まる
-  } | null>(null);
-  const [contextWindow, setContextWindow] = useState<number | null>(null);
-  const [sessionTokens, setSessionTokens] = useState<number | null>(null);
-
-  // llama-server /props からコンテキストウィンドウを 1 度だけ取得。
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const resp = await fetch("/api/opencode/llama-stats");
-        if (!resp.ok) return;
-        const j = (await resp.json()) as { contextWindow?: number };
-        if (!cancelled && typeof j.contextWindow === "number") {
-          setContextWindow(j.contextWindow);
-        }
-      } catch {
-        // llama-server に届かないときは無表示で妥協する。
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // busy 中は 300ms 刻みで経過時間を再描画するためのダミー tick。
-  // (読み捨てだが、state 更新で親 ChatThread が再レンダされ、
-  //  下で `Date.now()` を読んでいる計算が refresh される)
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!busy) return;
-    const id = setInterval(() => setTick((t) => t + 1), 300);
-    return () => clearInterval(id);
-  }, [busy]);
-
-  // 最新の assistant 応答テキストとセッション全文を ref で参照可能に保つ。
-  // busy→idle の transition effect から、その時点の最新値を読むために使う。
-  const latestAssistantTextRef = useRef("");
-  const latestSessionTextRef = useRef("");
-  useEffect(() => {
-    let assistant = "";
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role !== "user") {
-        assistant = messages[i].partIds
-          .map((pid) => {
-            const p = parts[pid];
-            // reasoning も tokenize 対象に含める (LLM が受け取る history に入る)
-            return p?.text ?? "";
-          })
-          .join("");
-        break;
-      }
-    }
-    latestAssistantTextRef.current = assistant;
-    latestSessionTextRef.current = messages
-      .flatMap((m) => m.partIds.map((pid) => parts[pid]?.text ?? ""))
-      .join("\n");
-  }, [messages, parts]);
-
-  // busy の立ち上がり / 立ち下がりで snapshot を更新し、完了時に /tokenize。
-  useEffect(() => {
-    if (busy) {
-      if (!busyStartRef.current) {
-        busyStartRef.current = { at: Date.now(), chars: totalChars };
-      }
-      return;
-    }
-    if (!busyStartRef.current) return;
-    const seconds = (Date.now() - busyStartRef.current.at) / 1000;
-    const chars = Math.max(0, totalChars - busyStartRef.current.chars);
-    setLastRun({ chars, seconds, tokens: null });
-    busyStartRef.current = null;
-
-    // 応答全文 → 正確なトークン数 (tok/s 計算用)
-    const assistant = latestAssistantTextRef.current;
-    if (assistant) {
-      void (async () => {
-        try {
-          const resp = await fetch("/api/opencode/llama-stats", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: assistant }),
-          });
-          if (!resp.ok) return;
-          const j = (await resp.json()) as { count?: number };
-          if (typeof j.count === "number") {
-            setLastRun((prev) =>
-              prev ? { ...prev, tokens: j.count ?? null } : prev,
-            );
-          }
-        } catch {
-          /* 失敗時は lastRun.tokens は null のまま */
-        }
-      })();
-    }
-    // セッション全文 → コンテキスト利用率
-    const session = latestSessionTextRef.current;
-    if (session) {
-      void (async () => {
-        try {
-          const resp = await fetch("/api/opencode/llama-stats", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: session }),
-          });
-          if (!resp.ok) return;
-          const j = (await resp.json()) as { count?: number };
-          if (typeof j.count === "number") setSessionTokens(j.count);
-        } catch {
-          /* ignore */
-        }
-      })();
-    }
-  }, [busy, totalChars]);
-
-  // セッションを切り替えたら前回の統計を持ち越さない。
-  useEffect(() => {
-    setLastRun(null);
-    setSessionTokens(null);
-    busyStartRef.current = null;
-  }, [sessionId]);
-
-  // 前回 run の chars↔tokens 比をストリーム中の推定に流用する。
-  // 未キャリブレーションの間は 1 token ≒ 2 chars を暫定値に。
-  const tokenRatio =
-    lastRun && lastRun.tokens && lastRun.chars > 0
-      ? lastRun.tokens / lastRun.chars
-      : 0.5;
-
-  const fmt = (n: number) => n.toLocaleString("en-US");
-  const ctxBadge =
-    sessionTokens !== null && contextWindow
-      ? ` · コンテキスト ${fmt(sessionTokens)} / ${fmt(contextWindow)} (${(
-          (sessionTokens / contextWindow) *
-          100
-        ).toFixed(1)}%)`
-      : contextWindow && !sessionTokens
-        ? ` · コンテキスト ${fmt(contextWindow)} 上限`
-        : "";
-
-  let statusLine: string;
-  if (busy && busyStartRef.current) {
-    const seconds = Math.max(
-      0.001,
-      (Date.now() - busyStartRef.current.at) / 1000,
-    );
-    const chars = Math.max(0, totalChars - busyStartRef.current.chars);
-    const estTokens = Math.round(chars * tokenRatio);
-    const rate = estTokens / seconds;
-    statusLine = `⚡ 生成中 · ~${fmt(estTokens)} トークン · ${seconds.toFixed(1)}s · ~${rate.toFixed(1)} トークン/秒${ctxBadge}`;
-  } else if (lastRun && lastRun.tokens && lastRun.tokens > 0) {
-    const rate = lastRun.tokens / Math.max(0.001, lastRun.seconds);
-    statusLine = `直近の応答 · ${fmt(lastRun.tokens)} トークン · ${lastRun.seconds.toFixed(1)}s · ${rate.toFixed(1)} トークン/秒${ctxBadge}`;
-  } else if (lastRun && lastRun.chars > 0) {
-    // tokenize 結果待ち (ネット遅延等)
-    const estTokens = Math.round(lastRun.chars * tokenRatio);
-    statusLine = `直近の応答 · ~${fmt(estTokens)} トークン · ${lastRun.seconds.toFixed(1)}s (計測中…)${ctxBadge}`;
-  } else if (totalChars > 0) {
-    statusLine = `セッション継続中${ctxBadge || ` · ${messages.length} メッセージ`}`;
-  } else if (contextWindow) {
-    statusLine = `新しい会話を始めましょう · コンテキスト上限 ${fmt(contextWindow)} トークン`;
-  } else {
-    statusLine = "新しい会話を始めましょう";
-  }
+  // ストリーミング指標 (busy 計測 / llama-server /tokenize / コンテキスト率)
+  // は use-stream-stats hook に切り出し済み。挙動は従来と等価。
+  const { statusLine } = useStreamStats({ sessionId, messages, parts, busy });
 
   // opencode は step-start / step-finish を挟んで複数の assistant message を
   // 作るため、そのままだと 1 回の返答が複数の吹き出しに見えて読みにくい。
@@ -704,7 +537,7 @@ function ChatThread({
   );
 }
 
-function MessagePart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
+export function MessagePart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
   if (part.type === "reasoning") {
     return <ReasoningPart part={part} theme={theme} />;
   }
@@ -733,7 +566,7 @@ function MessagePart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
 // 翻訳は /api/opencode/translate の text/plain ストリームを逐次連結する。
 // 1 回翻訳した結果はキャッシュし、再度「日本語」タブを押しても再取得しない。
 // 思考ログがストリーム途中の場合は「再翻訳」で最新版に更新できる。
-function ReasoningPart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
+export function ReasoningPart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
   const [tab, setTab] = useState<"source" | "ja">("source");
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
@@ -889,7 +722,7 @@ function ReasoningPart({ part, theme }: { part: PartInfo; theme: ChatTheme }) {
 // メッセージ履歴のスクロール領域内に「次の下書きメッセージ」として並ぶ
 // インライン入力カード。下部固定のチャット欄ではなく会話フローの末尾に
 // 居座る形で、複数行入力にも内容量に応じて自動で伸びる。
-function InlineComposer({
+export function InlineComposer({
   disabled,
   busy,
   value,
