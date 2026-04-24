@@ -21,6 +21,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "dockerode": "^4.0.10",
     "dotenv": "^17.4.2",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/typography": "^0.5.19",
+    "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/dockerode": "^4.0.1",
     "@types/node": "^20",

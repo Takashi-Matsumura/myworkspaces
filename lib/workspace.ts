@@ -1,5 +1,6 @@
-import { Writable } from "node:stream";
-import { pack as tarPack } from "tar-stream";
+import { PassThrough, type Readable, Writable } from "node:stream";
+import { pack as tarPack, extract as tarExtract } from "tar-stream";
+import archiver from "archiver";
 import { ensureContainer } from "./docker-session";
 import { workspaceCwd } from "./user-store";
 import { buildOpencodeJson, getSettings } from "./settings";
@@ -310,4 +311,74 @@ export async function uploadFile(
   }
 
   await container.putArchive(tarBuf, { path: targetDir });
+}
+
+// ワークスペース `/root/workspaces/{workspaceId}` をコンテナから tar で取り出し、
+// ZIP に再パックして Readable stream として返す。
+//
+// Windows 互換のため archiver v7 のデフォルト挙動:
+// - general purpose bit flag の bit 11 (EFS / UTF-8 flag) を立てる
+// - 各エントリに Info-ZIP Unicode Path Extra Field (0x7075) を付与
+// これで最近の Windows 10/11 + 7-Zip / WinRAR で日本語ファイル名が
+// 正しく展開される。
+export function exportWorkspaceAsZip(
+  sub: string,
+  workspaceId: string,
+): Readable {
+  const out = new PassThrough();
+  void (async () => {
+    try {
+      if (!/^[a-zA-Z0-9_-]+$/.test(workspaceId)) {
+        throw new WorkspaceError("invalid workspaceId", 400);
+      }
+      const container = await ensureContainer(sub);
+      const srcPath = `${WORKSPACE_ROOT}/${workspaceId}`;
+      const tarStream = (await container.getArchive({
+        path: srcPath,
+      })) as Readable;
+
+      const archive = archiver("zip", {
+        zlib: { level: 6 },
+      });
+      archive.on("error", (e) => out.destroy(e));
+      archive.pipe(out);
+
+      const extract = tarExtract();
+      extract.on("entry", (header, file, next) => {
+        const chunks: Buffer[] = [];
+        file.on("data", (c: Buffer) => chunks.push(c));
+        file.on("end", () => {
+          if (header.type === "file") {
+            archive.append(Buffer.concat(chunks), {
+              name: header.name,
+              date: header.mtime ?? new Date(),
+              mode: header.mode,
+            });
+          } else if (header.type === "directory") {
+            // 空ディレクトリも保持したいので 0 バイトのエントリとして追加。
+            // 非空ディレクトリは下位のファイルから暗黙に作られるので重複しても無害。
+            archive.append(Buffer.alloc(0), {
+              name: header.name.endsWith("/")
+                ? header.name
+                : `${header.name}/`,
+              date: header.mtime ?? new Date(),
+              mode: header.mode,
+            });
+          }
+          // symlink / block / char 等は ZIP で扱いにくいので素直に無視
+          next();
+        });
+        file.on("error", (e) => next(e));
+        file.resume();
+      });
+      extract.on("finish", () => {
+        void archive.finalize();
+      });
+      extract.on("error", (e) => out.destroy(e));
+      tarStream.pipe(extract);
+    } catch (err) {
+      out.destroy(err as Error);
+    }
+  })();
+  return out;
 }
