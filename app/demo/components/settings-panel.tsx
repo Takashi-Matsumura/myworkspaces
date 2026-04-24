@@ -392,7 +392,8 @@ export default function SettingsPanel({
               <p className="mb-2 text-[11px] leading-relaxed text-slate-600">
                 テンプレートの <code>*-rules.md</code>（language / vision / business / pdf / coding）を
                 既存の全ワークスペースに上書き配布し、<code>opencode.json</code> の
-                <code>instructions</code> にも不足分を追加します。
+                <code>instructions</code> と <code>agent</code>（plan/build の temperature・top_p）の
+                不足分も追加します。既存の個別設定値は保持されます。
               </p>
               <button
                 type="button"

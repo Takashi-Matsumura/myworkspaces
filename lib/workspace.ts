@@ -175,14 +175,28 @@ export async function createWorkspaceDirectory(
   }
 }
 
-// 既存ワークスペースにテンプレートのルールファイルを再配布する。
+// opencode.json の agent ブロックに適用したいデフォルト値。
+// opencode schema は agent.<name>.temperature / top_p のみ対応。
+// ローカル小型モデル (Gemma 4 E4B 等) の tool call 信頼性を上げる目的で、
+// plan は温度をやや高め (発想幅)、build は低め (実装精度) に設定。
+const TEMPLATE_AGENT_DEFAULTS: Record<string, { temperature: number; top_p: number }> = {
+  plan: { temperature: 0.4, top_p: 0.95 },
+  build: { temperature: 0.2, top_p: 0.9 },
+};
+
+// 既存ワークスペースにテンプレートの最新設定を再配布する。
 // - テンプレ管理の .md は上書きコピー (ユーザーが直接編集していないことを前提)
 // - opencode.json の instructions 配列に不足しているテンプレルールを追加 (既存要素は保持)
-// - opencode.json が無い / parse できない場合はルール追加をスキップ (.md のコピーは行う)
+// - opencode.json の agent.<name> にテンプレデフォルトを追加 (ユーザー設定がある場合は保持)
+// - opencode.json が無い / parse できない場合は merge をスキップ (.md のコピーは行う)
 export async function syncTemplateRules(
   sub: string,
   id: string,
-): Promise<{ copiedFiles: string[]; instructionsAdded: string[] }> {
+): Promise<{
+  copiedFiles: string[];
+  instructionsAdded: string[];
+  agentsAdded: string[];
+}> {
   const cwdPath = workspaceCwd(id);
   const cwd = shellQuote(cwdPath);
 
@@ -198,15 +212,19 @@ export async function syncTemplateRules(
     );
   }
 
-  // instructions を merge
+  // instructions と agent を merge
   const opencodePath = `${cwdPath}/opencode.json`;
   const instructionsAdded: string[] = [];
+  const agentsAdded: string[] = [];
   try {
     const payload = await readFile(sub, opencodePath);
     const json = JSON.parse(payload.content) as {
       instructions?: unknown;
+      agent?: unknown;
       [k: string]: unknown;
     };
+
+    // instructions 配列に欠損ルールを追加
     const current = Array.isArray(json.instructions)
       ? (json.instructions as unknown[]).filter((v): v is string => typeof v === "string")
       : [];
@@ -218,8 +236,25 @@ export async function syncTemplateRules(
         instructionsAdded.push(rule);
       }
     }
-    if (instructionsAdded.length > 0) {
-      json.instructions = merged;
+
+    // agent.<name> にテンプレデフォルトを追加 (既存 agent エントリがある場合は保持、
+    // 無い場合のみ新規追加。温度の個別上書きは尊重する)
+    const currentAgent =
+      typeof json.agent === "object" && json.agent !== null
+        ? (json.agent as Record<string, unknown>)
+        : {};
+    const mergedAgent: Record<string, unknown> = { ...currentAgent };
+    for (const [name, defaults] of Object.entries(TEMPLATE_AGENT_DEFAULTS)) {
+      if (!(name in mergedAgent)) {
+        mergedAgent[name] = { ...defaults };
+        agentsAdded.push(name);
+      }
+    }
+
+    const dirty = instructionsAdded.length > 0 || agentsAdded.length > 0;
+    if (dirty) {
+      if (instructionsAdded.length > 0) json.instructions = merged;
+      if (agentsAdded.length > 0) json.agent = mergedAgent;
       const next = JSON.stringify(json, null, 2) + "\n";
       await writeFileInContainer(sub, opencodePath, Buffer.from(next, "utf-8"));
     }
@@ -227,7 +262,11 @@ export async function syncTemplateRules(
     console.warn("[workspace] syncTemplateRules: skipped opencode.json merge", err);
   }
 
-  return { copiedFiles: [...TEMPLATE_RULES], instructionsAdded };
+  return {
+    copiedFiles: [...TEMPLATE_RULES],
+    instructionsAdded,
+    agentsAdded,
+  };
 }
 
 export async function removeWorkspaceDirectory(

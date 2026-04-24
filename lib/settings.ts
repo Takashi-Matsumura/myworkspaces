@@ -120,6 +120,14 @@ export function buildOpencodeJson(settings: UserSettings): string {
         },
       },
       model: `llamacpp/${model}`,
+      // ローカル小型モデル (Gemma 4 E4B 等) の tool call 信頼性を上げるため
+      // サンプリングを少し絞る。plan は発想量を残すため温度を高め、build は
+      // 実装精度を上げるため低めにする。opencode schema は
+      // agent.<name>.temperature / top_p のみ対応。
+      agent: {
+        plan: { temperature: 0.4, top_p: 0.95 },
+        build: { temperature: 0.2, top_p: 0.9 },
+      },
     };
     return JSON.stringify(config, null, 2) + "\n";
   }
