@@ -25,3 +25,11 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Coding パネル (variant="coding") の OpencodeChat はダーク地。
+   KaTeX は既定で `.katex { color: #... }` を効かせてくるので、
+   スコープ内だけ inherit に戻して親の text-white/90 を拾わせる。 */
+.chat-dark .katex,
+.chat-dark .katex * {
+  color: inherit;
+}
