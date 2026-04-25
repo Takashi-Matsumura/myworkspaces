@@ -14,10 +14,14 @@ export default function XtermView({
   cwd,
   cmd,
   fontSize = 13,
+  cursorStyle = "bar",
+  scrollback = 10000,
 }: {
   cwd: string;
   cmd?: "opencode" | "shell" | null;
   fontSize?: number;
+  cursorStyle?: "bar" | "block" | "underline";
+  scrollback?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -32,9 +36,9 @@ export default function XtermView({
       lineHeight: 1.0,
       letterSpacing: 0,
       cursorBlink: true,
-      cursorStyle: "bar",
+      cursorStyle,
       // スクロールバックを広めに取って、貼り付け直後に過去出力が飛ばないようにする。
-      scrollback: 10000,
+      scrollback,
       // Cmd/Option 系のキーバインドが bash の Meta (Alt) として届くようにする。
       macOptionIsMeta: true,
       // 右クリック時に単語選択 → コピーメニューを出す挙動。
@@ -140,7 +144,7 @@ export default function XtermView({
       ws?.close();
       term.dispose();
     };
-  }, [cwd, cmd, fontSize]);
+  }, [cwd, cmd, fontSize, cursorStyle, scrollback]);
 
   return (
     <div
