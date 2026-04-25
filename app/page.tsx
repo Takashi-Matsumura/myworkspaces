@@ -208,8 +208,8 @@ export default function Home() {
             <PanelSwitcherButton
               active={frontPanel === "ubuntu"}
               onClick={() => bringToFront("ubuntu")}
-              label="Bash"
-              title="Bash パネルを最前面に"
+              label="Shell"
+              title="Shell パネル (ubuntu / bash) を最前面に"
               accent="#4f46e5"
             >
               <TerminalSquare className="h-3 w-3" />
