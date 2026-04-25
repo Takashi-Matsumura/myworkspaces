@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import {
+  OpencodeConfigSchema,
+  SessionInfoSchema,
+  SessionsResponseSchema,
+} from "@/lib/api-schemas";
 
 // opencode の /event SSE を購読しつつ、セッション / メッセージ / part を
 // まとめて管理する状態ストア。
@@ -399,7 +404,7 @@ export function useOpencodeStream() {
   const refreshSessions = useCallback(async () => {
     const resp = await fetch("/api/opencode/sessions");
     if (!resp.ok) return;
-    const json = (await resp.json()) as SessionInfo[];
+    const json = SessionsResponseSchema.parse(await resp.json()) as SessionInfo[];
     dispatch({ type: "sessions/replace", sessions: json });
   }, []);
 
@@ -422,7 +427,7 @@ export function useOpencodeStream() {
         dispatch({ type: "config/set", config: null });
         return;
       }
-      const json = (await resp.json()) as OpencodeConfig;
+      const json = OpencodeConfigSchema.parse(await resp.json());
       dispatch({ type: "config/set", config: json });
     } catch {
       dispatch({ type: "config/set", config: null });
@@ -436,7 +441,7 @@ export function useOpencodeStream() {
       body: "{}",
     });
     if (!resp.ok) return null;
-    const session = (await resp.json()) as SessionInfo;
+    const session = SessionInfoSchema.parse(await resp.json()) as SessionInfo;
     dispatch({ type: "sessions/upsert", session });
     return session;
   }, []);

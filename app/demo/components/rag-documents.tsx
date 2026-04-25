@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { FileText, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useMount } from "../hooks/use-mount";
+import { ApiErrorSchema, RagDocsResponseSchema } from "@/lib/api-schemas";
 
 type RagDoc = {
   id: string;
@@ -15,10 +16,10 @@ type RagDoc = {
 async function apiList(): Promise<RagDoc[]> {
   const res = await fetch("/api/rag/documents", { cache: "no-store" });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const parsed = ApiErrorSchema.safeParse(await res.json().catch(() => ({})));
+    throw new Error(parsed.success ? (parsed.data.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`);
   }
-  const data = (await res.json()) as { documents: RagDoc[] };
+  const data = RagDocsResponseSchema.parse(await res.json());
   return data.documents;
 }
 

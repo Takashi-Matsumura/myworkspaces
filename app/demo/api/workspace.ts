@@ -1,4 +1,11 @@
 import type { PreviewResult } from "@/lib/preview";
+import {
+  ApiErrorSchema,
+  CreateWorkspaceResponseSchema,
+  ListDirResponseSchema,
+  ListWorkspacesResponseSchema,
+  PreviewResultSchema,
+} from "@/lib/api-schemas";
 
 export type WorkspaceListEntry = {
   id: string;
@@ -20,29 +27,28 @@ export function joinPath(base: string, name: string): string {
   return base.endsWith("/") ? `${base}${name}` : `${base}/${name}`;
 }
 
+async function readError(res: Response): Promise<string> {
+  const body = ApiErrorSchema.safeParse(await res.json().catch(() => ({})));
+  return body.success ? (body.data.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`;
+}
+
 export async function apiListDir(path: string): Promise<Entry[]> {
   const res = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, { cache: "no-store" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
-  const data = (await res.json()) as { entries: Entry[] };
+  if (!res.ok) throw new Error(await readError(res));
+  const data = ListDirResponseSchema.parse(await res.json());
   return data.entries;
 }
 
 export async function apiPreviewFile(path: string): Promise<PreviewResult> {
   const res = await fetch(`/api/workspace/preview?path=${encodeURIComponent(path)}`, { cache: "no-store" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
-  return (await res.json()) as PreviewResult;
+  if (!res.ok) throw new Error(await readError(res));
+  return PreviewResultSchema.parse(await res.json());
 }
 
 export async function apiListWorkspaces(): Promise<WorkspaceListEntry[]> {
   const res = await fetch("/api/user/workspaces", { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as { workspaces: WorkspaceListEntry[] };
+  const data = ListWorkspacesResponseSchema.parse(await res.json());
   return data.workspaces;
 }
 
@@ -52,17 +58,15 @@ export async function apiCreateWorkspace(label: string): Promise<WorkspaceListEn
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ label }),
   });
-  const data = (await res.json().catch(() => ({}))) as { workspace?: WorkspaceListEntry; error?: string };
+  const parsed = CreateWorkspaceResponseSchema.safeParse(await res.json().catch(() => ({})));
+  const data = parsed.success ? parsed.data : {};
   if (!res.ok || !data.workspace) throw new Error(data.error ?? `HTTP ${res.status}`);
   return data.workspace;
 }
 
 export async function apiDeleteWorkspace(id: string): Promise<void> {
   const res = await fetch(`/api/user/workspaces?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readError(res));
 }
 
 export async function apiTouchWorkspace(id: string): Promise<void> {
@@ -93,18 +97,12 @@ export async function apiUploadFile(
   form.append("relativePath", relativePath);
   form.append("file", file);
   const res = await fetch("/api/workspace/upload", { method: "POST", body: form });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readError(res));
 }
 
 export async function apiDeleteFile(path: string): Promise<void> {
   const res = await fetch(`/api/workspace/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readError(res));
 }
 
 async function collectFromEntry(

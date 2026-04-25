@@ -23,6 +23,7 @@ import {
 import { CHAT_THEMES } from "./chat-theme";
 import { CODING_THEME } from "./coding-theme";
 import { useStreamStats } from "./use-stream-stats";
+import { SkillsResponseSchema, WorkspaceMinimalListSchema } from "@/lib/api-schemas";
 import {
   expandSlashCommand,
   InlineComposer,
@@ -125,8 +126,7 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
     try {
       const resp = await fetch("/api/opencode/skills", { cache: "no-store" });
       if (!resp.ok) return;
-      const json = (await resp.json()) as { skills: SkillSummary[] };
-      setSkills(json.skills);
+      setSkills(SkillsResponseSchema.parse(await resp.json()).skills);
     } catch {
       /* noop */
     }
@@ -139,10 +139,8 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
       try {
         const wsResp = await fetch("/api/user/workspaces");
         if (!wsResp.ok) throw new Error(`workspaces ${wsResp.status}`);
-        const wsJson = (await wsResp.json()) as {
-          workspaces?: Array<{ id: string; label: string }>;
-        };
-        const wid = wsJson.workspaces?.[0]?.id;
+        const wsJson = WorkspaceMinimalListSchema.parse(await wsResp.json());
+        const wid = wsJson.workspaces[0]?.id;
         if (wid) {
           const a = await fetch("/api/opencode/activate", {
             method: "POST",

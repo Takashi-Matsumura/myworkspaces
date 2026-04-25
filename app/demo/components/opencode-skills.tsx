@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2, RefreshCw, X } from "lucide-react";
+import {
+  ApiErrorSchema,
+  SkillDetailSchema,
+  SkillsResponseSchema,
+} from "@/lib/api-schemas";
 
 type SkillSummary = {
   name: string;
@@ -108,11 +113,10 @@ const SKILLS_THEMES: Record<SkillsVariant, SkillsTheme> = {
 async function apiList(): Promise<SkillSummary[]> {
   const res = await fetch("/api/opencode/skills", { cache: "no-store" });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const parsed = ApiErrorSchema.safeParse(await res.json().catch(() => ({})));
+    throw new Error(parsed.success ? (parsed.data.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`);
   }
-  const data = (await res.json()) as { skills: SkillSummary[] };
-  return data.skills;
+  return SkillsResponseSchema.parse(await res.json()).skills;
 }
 
 async function apiGet(name: string): Promise<SkillDetail> {
@@ -120,10 +124,10 @@ async function apiGet(name: string): Promise<SkillDetail> {
     cache: "no-store",
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const parsed = ApiErrorSchema.safeParse(await res.json().catch(() => ({})));
+    throw new Error(parsed.success ? (parsed.data.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`);
   }
-  return (await res.json()) as SkillDetail;
+  return SkillDetailSchema.parse(await res.json());
 }
 
 async function apiSave(detail: SkillDetail): Promise<void> {
