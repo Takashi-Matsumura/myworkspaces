@@ -405,10 +405,64 @@ export async function ensureUserNetwork(sub: string): Promise<string> {
   return name;
 }
 
+// myworkspaces が管理するコンテナの命名規則。
+// ensure*Container 系で作るものはすべて "myworkspaces-" で始まる。
+const MANAGED_PREFIX = "myworkspaces-";
+
 async function removeUserNetwork(sub: string): Promise<void> {
   const name = userNetworkName(sub);
+  const network = docker.getNetwork(name);
+
+  // ネットワークに残っているエンドポイントを inspect。
+  // 直前で removeContainer / removeRagSidecar / removeOpencodeSidecar が成功
+  // していれば管理コンテナはすでに居ないが、レースで残っている場合や、
+  // ユーザが手動接続した未管理コンテナ (例: ws-nextjs-proxy) があると
+  // network.remove() が 403 "has active endpoints" で失敗する。
+  // そのため、managed prefix のものは force disconnect で剥がし、
+  // 未管理コンテナが残っているなら削除を skip して warning ログにする
+  // (ネットワークは ensureUserNetwork で次回も再利用される)。
+  let info: Docker.NetworkInspectInfo;
   try {
-    await docker.getNetwork(name).remove();
+    info = await network.inspect();
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 404) return; // 既に存在しない
+    throw err;
+  }
+
+  const containers = (info.Containers ?? {}) as Record<string, { Name?: string }>;
+  const endpointNames = Object.values(containers)
+    .map((c) => c.Name)
+    .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+  const managed: string[] = [];
+  const external: string[] = [];
+  for (const epName of endpointNames) {
+    if (epName.startsWith(MANAGED_PREFIX)) managed.push(epName);
+    else external.push(epName);
+  }
+
+  // 管理コンテナ (本来 remove で剥がれているはずだが念のため) を切り離す。
+  for (const ep of managed) {
+    try {
+      await network.disconnect({ Container: ep, Force: true });
+      console.log(`[docker] disconnected ${ep} from ${name}`);
+    } catch (err) {
+      // 失敗しても致命的ではない。続行する (削除も skip 経路に流れるだけ)。
+      console.warn(`[docker] disconnect ${ep} from ${name} failed:`, err);
+    }
+  }
+
+  if (external.length > 0) {
+    console.warn(
+      `[docker] user network ${name} still has external endpoints (${external.join(", ")}); ` +
+        `keeping network (it will be reused by ensureUserNetwork next time)`,
+    );
+    return;
+  }
+
+  try {
+    await network.remove();
     console.log(`[docker] user network removed: ${name}`);
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
