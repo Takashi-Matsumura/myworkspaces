@@ -73,8 +73,7 @@ export default function LoginPage() {
           busy ? "opacity-60" : ""
         }`}
       >
-        <h1 className="text-xl font-semibold text-neutral-900 mb-1">myworkspaces</h1>
-        <p className="text-sm text-neutral-500 mb-6">ログイン</p>
+        <h1 className="text-xl font-semibold text-neutral-900 mb-6">myworkspaces</h1>
 
         <form onSubmit={submit} className="space-y-4">
           <fieldset disabled={busy} className="space-y-4">
