@@ -114,18 +114,11 @@ RUN npm install -g @anthropic-ai/claude-code
 # "Cannot find package 'xlsx'" でツールロードが即死 → opencode が無反応になる。
 ENV NODE_PATH=/usr/lib/node_modules
 
-# describe_image.ts / read_excel.ts / vision-rules.md / business-rules.md の
-# テンプレート。新規ワークスペース作成時に /root/workspaces/{id}/ へコピーして
-# 使う。イメージ内の固定配置先は /opt/myworkspaces/templates/。
-RUN mkdir -p /opt/myworkspaces/templates/.opencode/tools
-COPY templates/describe_image.ts /opt/myworkspaces/templates/.opencode/tools/
-COPY templates/read_excel.ts /opt/myworkspaces/templates/.opencode/tools/
-COPY templates/read_pdf.ts /opt/myworkspaces/templates/.opencode/tools/
-COPY templates/language-rules.md /opt/myworkspaces/templates/
-COPY templates/vision-rules.md /opt/myworkspaces/templates/
-COPY templates/business-rules.md /opt/myworkspaces/templates/
-COPY templates/pdf-rules.md /opt/myworkspaces/templates/
-COPY templates/coding-rules.md /opt/myworkspaces/templates/
+# 新規ワークスペース作成時に /root/workspaces/{id}/ へコピーするテンプレート。
+# tools (.ts) と rules (*-rules.md) はどちらも .opencode/ 配下に集約してあり、
+# UI 側がドット隠しで初期ファイルをまとめて非表示にできる。
+# イメージ内の固定配置先は /opt/myworkspaces/templates/。
+COPY templates/.opencode /opt/myworkspaces/templates/.opencode
 COPY templates/opencode.json /opt/myworkspaces/templates/
 
 WORKDIR /root

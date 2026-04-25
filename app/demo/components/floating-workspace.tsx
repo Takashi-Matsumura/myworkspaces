@@ -23,6 +23,8 @@ import {
   Download,
   Settings,
   ArrowLeft,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
 import SettingsPanel from "./settings-panel";
@@ -195,6 +197,7 @@ function TreeRow({
   selectedFile,
   loadingPaths,
   fontSize,
+  showHidden,
   onToggleDir,
   onSelectFile,
 }: {
@@ -206,6 +209,7 @@ function TreeRow({
   selectedFile: string | null;
   loadingPaths: Set<string>;
   fontSize: number;
+  showHidden: boolean;
   onToggleDir: (p: string) => void;
   onSelectFile: (p: string) => void;
 }) {
@@ -213,7 +217,8 @@ function TreeRow({
   const isDir = entry.isDir;
   const isOpen = expanded.has(path);
   const isLoading = loadingPaths.has(path);
-  const children = childEntries.get(path);
+  const rawChildren = childEntries.get(path);
+  const children = rawChildren && (showHidden ? rawChildren : rawChildren.filter((c) => !c.name.startsWith(".")));
   const isSelected = selectedFile === path;
   return (
     <div>
@@ -246,6 +251,7 @@ function TreeRow({
               selectedFile={selectedFile}
               loadingPaths={loadingPaths}
               fontSize={fontSize}
+              showHidden={showHidden}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
             />
@@ -271,6 +277,7 @@ function TreeRootRow({
   selectedFile,
   loadingPaths,
   fontSize,
+  showHidden,
   onToggleDir,
   onSelectFile,
 }: {
@@ -280,13 +287,15 @@ function TreeRootRow({
   selectedFile: string | null;
   loadingPaths: Set<string>;
   fontSize: number;
+  showHidden: boolean;
   onToggleDir: (p: string) => void;
   onSelectFile: (p: string) => void;
 }) {
   const rootPath = workspace.cwd;
   const isOpen = expanded.has(rootPath);
   const isLoading = loadingPaths.has(rootPath);
-  const children = childEntries.get(rootPath);
+  const rawChildren = childEntries.get(rootPath);
+  const children = rawChildren && (showHidden ? rawChildren : rawChildren.filter((c) => !c.name.startsWith(".")));
   return (
     <div>
       <button
@@ -316,6 +325,7 @@ function TreeRootRow({
               selectedFile={selectedFile}
               loadingPaths={loadingPaths}
               fontSize={fontSize}
+              showHidden={showHidden}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
             />
@@ -378,6 +388,17 @@ export default function FloatingWorkspace({
     setFontSize((prev) => {
       const next = Math.min(20, Math.max(10, prev + delta));
       localStorage.setItem("workspace-fontSize", String(next));
+      return next;
+    });
+  };
+  const [showHidden, setShowHidden] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("workspace-showHidden") === "1";
+  });
+  const toggleShowHidden = () => {
+    setShowHidden((prev) => {
+      const next = !prev;
+      localStorage.setItem("workspace-showHidden", next ? "1" : "0");
       return next;
     });
   };
@@ -842,6 +863,18 @@ export default function FloatingWorkspace({
         </button>
         <button
           type="button"
+          onClick={toggleShowHidden}
+          className={`inline-flex shrink-0 items-center rounded border p-1 ${
+            showHidden
+              ? "border-slate-400 bg-slate-100 text-slate-800"
+              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+          title={showHidden ? "ドットファイルを隠す" : "ドットファイルを表示"}
+        >
+          {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          type="button"
           onClick={() => {
             if (!workspace) return;
             // ZIP のダウンロードは <a download> で普通の GET navigation に。
@@ -971,6 +1004,7 @@ export default function FloatingWorkspace({
               selectedFile={selectedFile}
               loadingPaths={loadingPaths}
               fontSize={fontSize}
+              showHidden={showHidden}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
             />
