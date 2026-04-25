@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings, ArrowLeft } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
 import SettingsPanel from "./settings-panel";
+import { useMount } from "../hooks/use-mount";
 import { usePointerDrag } from "../hooks/use-pointer-drag";
 import { usePointerResize } from "../hooks/use-pointer-resize";
 import { useFontSize } from "../hooks/use-font-size";
@@ -116,8 +117,7 @@ function FloatingWorkspaceInner({
 
   // 初回 + コンテナが存在しない間は数秒おきにポーリング (ターミナル起動やリセット後に自動で反映される)。
   // 一度 id を掴んだら止まる。
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void refetchContainer(); }, [refetchContainer]);
+  useMount(() => { void refetchContainer(); });
   useEffect(() => {
     if (containerInfo?.id) return;
     const t = setInterval(() => void refetchContainer(), 3000);

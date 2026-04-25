@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useMount } from "../hooks/use-mount";
 import {
   Settings as SettingsIcon,
   Sliders,
@@ -165,12 +166,11 @@ export default function SettingsPanel({
   );
 
   // 初回マウント時に 1 回だけ取得。
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
+  useMount(() => {
     void loadSettings();
     void loadContainer();
     void loadNetwork();
-  }, [loadSettings, loadContainer, loadNetwork]);
+  });
 
   useEffect(() => {
     if (!saved) return;

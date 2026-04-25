@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, LogOut } from "lucide-react";
+import { useMount } from "../hooks/use-mount";
 
 type Me = { id: string; username: string } | null;
 
@@ -17,9 +18,8 @@ export function AccountBadge() {
   const [mounted, setMounted] = useState(false);
   const busy = loggingOut || transitioning;
 
-  useEffect(() => {
+  useMount(() => {
     // SSR ガード: portal を使うには document にアクセス可能になってからレンダする必要がある
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     let cancel = false;
     fetch("/api/auth/me")
@@ -31,7 +31,7 @@ export function AccountBadge() {
     return () => {
       cancel = true;
     };
-  }, []);
+  });
 
   async function logout() {
     if (busy) return;
