@@ -25,6 +25,7 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
+  Trash2,
 } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
 import SettingsPanel from "./settings-panel";
@@ -195,6 +196,7 @@ function TreeRow({
   showHidden,
   onToggleDir,
   onSelectFile,
+  onDeleteFile,
 }: {
   parentPath: string;
   entry: Entry;
@@ -207,6 +209,7 @@ function TreeRow({
   showHidden: boolean;
   onToggleDir: (p: string) => void;
   onSelectFile: (p: string) => void;
+  onDeleteFile: (p: string) => void;
 }) {
   const path = join(parentPath, entry.name);
   const isDir = entry.isDir;
@@ -217,22 +220,41 @@ function TreeRow({
   const isSelected = selectedFile === path;
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => (isDir ? onToggleDir(path) : onSelectFile(path))}
-        className={`flex w-full items-center gap-1 px-2 py-0.5 text-left font-mono transition-colors ${
+      <div
+        className={`group relative flex w-full items-center transition-colors ${
           isSelected ? "bg-sky-100 text-sky-900" : "text-slate-700 hover:bg-slate-100"
         }`}
-        style={{ paddingLeft: 8 + depth * 12, fontSize }}
-        title={path}
       >
-        <span className="w-3 shrink-0 text-slate-400">
-          {isDir ? (isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />) : <span className="h-3 w-3" />}
-        </span>
-        <span className="shrink-0 text-slate-500">{isDir ? <Folder className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}</span>
-        <span className="truncate">{entry.name}</span>
-        {isLoading && <span className="ml-auto text-slate-400">…</span>}
-      </button>
+        <button
+          type="button"
+          onClick={() => (isDir ? onToggleDir(path) : onSelectFile(path))}
+          className="flex min-w-0 flex-1 items-center gap-1 px-2 py-0.5 text-left font-mono"
+          style={{ paddingLeft: 8 + depth * 12, fontSize }}
+          title={path}
+        >
+          <span className="w-3 shrink-0 text-slate-400">
+            {isDir ? (isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />) : <span className="h-3 w-3" />}
+          </span>
+          <span className="shrink-0 text-slate-500">{isDir ? <Folder className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}</span>
+          <span className="truncate">{entry.name}</span>
+          {isLoading && <span className="ml-auto text-slate-400">…</span>}
+        </button>
+        {!isDir && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteFile(path);
+            }}
+            className={`mr-1 shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 ${
+              isSelected ? "" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+            }`}
+            title="削除"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
       {isDir && isOpen && children && (
         <div>
           {children.map((c) => (
@@ -249,6 +271,7 @@ function TreeRow({
               showHidden={showHidden}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
+              onDeleteFile={onDeleteFile}
             />
           ))}
           {children.length === 0 && (
@@ -275,6 +298,7 @@ function TreeRootRow({
   showHidden,
   onToggleDir,
   onSelectFile,
+  onDeleteFile,
 }: {
   workspace: Workspace;
   expanded: Set<string>;
@@ -285,6 +309,7 @@ function TreeRootRow({
   showHidden: boolean;
   onToggleDir: (p: string) => void;
   onSelectFile: (p: string) => void;
+  onDeleteFile: (p: string) => void;
 }) {
   const rootPath = workspace.cwd;
   const isOpen = expanded.has(rootPath);
@@ -323,6 +348,7 @@ function TreeRootRow({
               showHidden={showHidden}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
+              onDeleteFile={onDeleteFile}
             />
           ))}
           {children.length === 0 && (
@@ -640,6 +666,36 @@ export default function FloatingWorkspace({
       }
     },
     [workspace],
+  );
+
+  const onDeleteFile = useCallback(
+    async (p: string) => {
+      const name = p.split("/").pop() ?? p;
+      if (!confirm(`「${name}」を削除します。元に戻せません。続けますか？`)) return;
+      setError(null);
+      try {
+        const res = await fetch(
+          `/api/workspace/file?path=${encodeURIComponent(p)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        // 親ディレクトリを再読込してツリーから消す。
+        const parent = p.slice(0, p.lastIndexOf("/"));
+        if (parent) await loadDir(parent);
+        // 削除したファイルが選択中だったらプレビューもクリア。
+        if (selectedFile === p) {
+          setSelectedFile(null);
+          setPreview(null);
+        }
+        setNotice(`削除しました: ${name}`);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [loadDir, selectedFile],
   );
 
   const onRefresh = useCallback(async () => {
@@ -1002,6 +1058,7 @@ export default function FloatingWorkspace({
               showHidden={showHidden}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
+              onDeleteFile={onDeleteFile}
             />
           ) : (
             <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>

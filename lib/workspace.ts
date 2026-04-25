@@ -384,6 +384,42 @@ export async function readFileBytes(
   return { buffer: res.stdout, size, truncated };
 }
 
+// ワークスペース内のファイルを 1 個削除する。誤操作リスクを下げるため:
+// - スコープ外パス、ワークスペースルート (/root/workspaces/{id}) 自体は不可
+// - ディレクトリは対象外 (UI 側もファイル行のみで削除ボタンを出す前提)
+//   コンテナ内 `[ -f path ]` で「通常ファイルである」ことを確認してから rm。
+export async function deleteFile(sub: string, filePath: string): Promise<void> {
+  if (!isInsideWorkspaces(filePath)) {
+    throw new WorkspaceError("path outside workspaces scope", 403);
+  }
+  // /root/workspaces/{id} までの 4 セグメント以下はワークスペース root 以上を指すため拒否。
+  // 例: "/root/workspaces" "/root/workspaces/abc" は不可、"/root/workspaces/abc/foo.txt" は可。
+  const segments = filePath.split("/").filter(Boolean);
+  if (segments.length < 4) {
+    throw new WorkspaceError("cannot delete workspace root", 403);
+  }
+  const q = shellQuote(filePath);
+  const check = await execCollect(sub, [
+    "/bin/bash",
+    "-c",
+    `if [ -d ${q} ]; then echo __IS_DIR__; elif [ ! -f ${q} ]; then echo __NOT_A_FILE__; else echo __OK__; fi`,
+  ]);
+  const verdict = check.stdout.toString("utf-8").trim();
+  if (verdict === "__IS_DIR__") {
+    throw new WorkspaceError("cannot delete a directory via this API", 400);
+  }
+  if (verdict === "__NOT_A_FILE__") {
+    throw new WorkspaceError("not a file", 404);
+  }
+  const res = await execCollect(sub, ["/bin/bash", "-c", `rm -f ${q}`]);
+  if (res.exitCode !== 0) {
+    throw new WorkspaceError(
+      `deleteFile failed: ${res.stderr.toString("utf-8")}`,
+      500,
+    );
+  }
+}
+
 export async function readFile(
   sub: string,
   filePath: string,
