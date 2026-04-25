@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import type { View } from "./whiteboard-canvas";
 import SettingsPanel from "./settings-panel";
+import FilePreview from "./file-preview";
+import type { PreviewResult } from "@/lib/preview";
 
 type ContainerInfo = {
   exists: boolean;
@@ -62,13 +64,6 @@ type Entry = {
   mtimeMs: number;
 };
 
-type FilePayload = {
-  path: string;
-  size: number;
-  truncated: boolean;
-  content: string;
-};
-
 function workspaceToFull(e: WorkspaceListEntry): Workspace {
   return { ...e, cwd: `/root/workspaces/${e.id}` };
 }
@@ -87,13 +82,13 @@ async function apiListDir(path: string): Promise<Entry[]> {
   return data.entries;
 }
 
-async function apiReadFile(path: string): Promise<FilePayload> {
-  const res = await fetch(`/api/workspace/file?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+async function apiPreviewFile(path: string): Promise<PreviewResult> {
+  const res = await fetch(`/api/workspace/preview?path=${encodeURIComponent(path)}`, { cache: "no-store" });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `HTTP ${res.status}`);
   }
-  return (await res.json()) as FilePayload;
+  return (await res.json()) as PreviewResult;
 }
 
 async function apiListWorkspaces(): Promise<WorkspaceListEntry[]> {
@@ -406,7 +401,7 @@ export default function FloatingWorkspace({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState<FilePayload | null>(null);
+  const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -535,7 +530,7 @@ export default function FloatingWorkspace({
       setExpanded(new Set([ws.cwd]));
       setChildEntries(new Map());
       setSelectedFile(null);
-      setFileContent(null);
+      setPreview(null);
       setListOpen(false);
       await loadDir(ws.cwd);
       // touch lastOpenedAt
@@ -632,12 +627,12 @@ export default function FloatingWorkspace({
     async (p: string) => {
       if (!workspace) return;
       setSelectedFile(p);
-      setFileContent(null);
+      setPreview(null);
       setFileLoading(true);
       setError(null);
       try {
-        const data = await apiReadFile(p);
-        setFileContent(data);
+        const data = await apiPreviewFile(p);
+        setPreview(data);
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -653,8 +648,8 @@ export default function FloatingWorkspace({
     await Promise.all(paths.map((p) => loadDir(p)));
     if (selectedFile) {
       try {
-        const data = await apiReadFile(selectedFile);
-        setFileContent(data);
+        const data = await apiPreviewFile(selectedFile);
+        setPreview(data);
       } catch (e) {
         setError((e as Error).message);
       }
@@ -1025,21 +1020,10 @@ export default function FloatingWorkspace({
             {fileLoading && (
               <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>reading…</div>
             )}
-            {!fileLoading && fileContent && (
-              <>
-                <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] text-slate-500">
-                  {fileContent.path.split("/").pop()}
-                  {fileContent.truncated && <span className="ml-2 text-amber-600">(truncated to 512KB)</span>}
-                </div>
-                <pre
-                  className="px-3 py-2 font-mono whitespace-pre-wrap break-words text-slate-800"
-                  style={{ fontSize }}
-                >
-                  {fileContent.content}
-                </pre>
-              </>
+            {!fileLoading && preview && (
+              <FilePreview result={preview} fontSize={fontSize} />
             )}
-            {!fileLoading && !fileContent && (
+            {!fileLoading && !preview && (
               <div className="px-3 py-2 font-mono text-slate-400" style={{ fontSize }}>ファイル表示（簡易）</div>
             )}
           </div>
