@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { FileText, RefreshCw, Trash2, Upload } from "lucide-react";
+import { useMount } from "../hooks/use-mount";
 
 type RagDoc = {
   id: string;
@@ -73,8 +74,7 @@ export default function RagDocuments({
   }, []);
 
   // 初回マウントでドキュメント一覧をロード。
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void refresh(); }, [refresh]);
+  useMount(() => { void refresh(); });
 
   const handleUpload = useCallback(
     async (files: FileList | File[]) => {

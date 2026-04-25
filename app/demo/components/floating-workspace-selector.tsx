@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMount } from "../hooks/use-mount";
 import {
   CodeXml,
   Download,
@@ -54,8 +55,7 @@ export function FloatingWorkspaceSelector({
   }, [setError]);
 
   // 初回マウント時に 1 回だけ読み込む。
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void refreshList(); }, [refreshList]);
+  useMount(() => { void refreshList(); });
 
   // 初回ロード時、登録済みワークスペースがあれば最も最近開いたものを自動で開く
   // (listWorkspaces は lastOpenedAt 降順で返るので、先頭 = 前回開いた ws)。
