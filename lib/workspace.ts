@@ -349,6 +349,41 @@ export async function listDirectory(
   return entries;
 }
 
+// ファイル全体を Buffer のまま取得する。バイナリ (画像 / xlsx / pdf) のプレビュー用。
+// readFile() は head -c で 512KB に切ってテキスト前提で返すため、別系統で用意する。
+export async function readFileBytes(
+  sub: string,
+  filePath: string,
+  maxBytes = 10 * 1024 * 1024,
+): Promise<{ buffer: Buffer; size: number; truncated: boolean }> {
+  if (!isInsideWorkspaces(filePath)) {
+    throw new WorkspaceError("path outside workspaces scope", 403);
+  }
+  const q = shellQuote(filePath);
+  const stat = await execCollect(sub, [
+    "/bin/bash",
+    "-c",
+    `[ -f ${q} ] && stat -c '%s' ${q} || echo __NOT_A_FILE__`,
+  ]);
+  const statOut = stat.stdout.toString("utf-8").trim();
+  if (statOut === "__NOT_A_FILE__") {
+    throw new WorkspaceError("not a file", 404);
+  }
+  const size = Number(statOut) || 0;
+  const truncated = size > maxBytes;
+  const readCmd = truncated
+    ? ["/bin/bash", "-c", `head -c ${maxBytes} ${q}`]
+    : ["/bin/bash", "-c", `cat ${q}`];
+  const res = await execCollect(sub, readCmd);
+  if (res.exitCode !== 0) {
+    throw new WorkspaceError(
+      `readFileBytes failed: ${res.stderr.toString("utf-8")}`,
+      500,
+    );
+  }
+  return { buffer: res.stdout, size, truncated };
+}
+
 export async function readFile(
   sub: string,
   filePath: string,
