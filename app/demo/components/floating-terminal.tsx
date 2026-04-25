@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   X,
@@ -22,6 +16,11 @@ import {
 } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 import type { BackTab } from "./back-tabs-panel";
+import { usePointerDrag } from "../hooks/use-pointer-drag";
+import { usePointerResize } from "../hooks/use-pointer-resize";
+import { useFontSize } from "../hooks/use-font-size";
+import { use3dFlip } from "../hooks/use-3d-flip";
+import { terminalFontSizeKey } from "../lib/storage-keys";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
 // Business パネルは 表面=opencode チャット / 裏面=BackTabsPanel (RAG/スキル/ヘルプ)。
@@ -150,13 +149,12 @@ export default function FloatingTerminal({
   });
   const [sceneSize, setSceneSize] = useState<SceneSize>({ w: 720, h: 440 });
   const [minimized, setMinimized] = useState(false);
-  const [flipped, setFlipped] = useState(false);
+  const { flipped, setFlipped } = use3dFlip(false);
   const [backNonce, setBackNonce] = useState(0);
-  const [fontSize, setFontSize] = useState(() => {
-    if (typeof window === "undefined") return 13;
-    const saved = localStorage.getItem(`terminal-fontSize-${variant}`);
-    return saved ? Number(saved) : 13;
-  });
+  const { fontSize, setFontSize, changeFontSize } = useFontSize(
+    terminalFontSizeKey(variant),
+    { default: 13, min: 10, max: 28 },
+  );
   const [cursorStyle, setCursorStyle] = useState<"bar" | "block" | "underline">("bar");
   const [scrollback, setScrollback] = useState(10000);
 
@@ -193,9 +191,11 @@ export default function FloatingTerminal({
         }
         if (
           typeof window !== "undefined" &&
-          !localStorage.getItem(`terminal-fontSize-${variant}`) &&
+          !localStorage.getItem(terminalFontSizeKey(variant)) &&
           typeof ap.defaultFontSize === "number"
         ) {
+          // raw setter で設定 — localStorage には書かないことで「ユーザがまだ
+          // 手動指定していないなら API 既定値を見る」という意味を保つ。
           setFontSize(ap.defaultFontSize);
         }
         if (ap.cursorStyle) setCursorStyle(ap.cursorStyle);
@@ -204,54 +204,13 @@ export default function FloatingTerminal({
         // 取得失敗時はフォールバック値で動作するので無視。
       }
     })();
-  }, [variant]);
+  }, [variant, setFontSize]);
 
-  const changeFontSize = (delta: number) => {
-    setFontSize((prev) => {
-      const next = Math.min(28, Math.max(10, prev + delta));
-      localStorage.setItem(`terminal-fontSize-${variant}`, String(next));
-      return next;
-    });
-  };
-
-  const dragRef = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
-  const resizeRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null);
-
-  const onHeaderPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = { sx: e.clientX, sy: e.clientY, px: scenePos.x, py: scenePos.y };
-  };
-  const onHeaderPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return;
-    const d = dragRef.current;
-    setScenePos({
-      x: d.px + (e.clientX - d.sx) / view.zoom,
-      y: d.py + (e.clientY - d.sy) / view.zoom,
-    });
-  };
-  const onHeaderPointerUp = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    dragRef.current = null;
-  };
-
-  const onResizePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resizeRef.current = { sx: e.clientX, sy: e.clientY, sw: sceneSize.w, sh: sceneSize.h };
-  };
-  const onResizePointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!resizeRef.current) return;
-    const r = resizeRef.current;
-    setSceneSize({
-      w: Math.max(320, r.sw + (e.clientX - r.sx) / view.zoom),
-      h: Math.max(180, r.sh + (e.clientY - r.sy) / view.zoom),
-    });
-  };
-  const onResizePointerUp = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    resizeRef.current = null;
-  };
+  const headerHandlers = usePointerDrag(view, scenePos, setScenePos);
+  const resizeHandlers = usePointerResize(view, sceneSize, setSceneSize, {
+    minW: 320,
+    minH: 180,
+  });
 
   const handleFlip = () => {
     if (!flipped && backNonce === 0) setBackNonce(Date.now());
@@ -318,9 +277,7 @@ export default function FloatingTerminal({
   const headerBar = (title: string) => (
     <div
       className={`flex h-9 cursor-grab items-center gap-2 rounded-t-lg border-b px-3 text-xs active:cursor-grabbing select-none ${style.headerBorder} ${style.headerBg} ${style.headerText}`}
-      onPointerDown={onHeaderPointerDown}
-      onPointerMove={onHeaderPointerMove}
-      onPointerUp={onHeaderPointerUp}
+      {...headerHandlers}
     >
       <div className="flex items-center gap-1.5">
         <button
@@ -465,9 +422,7 @@ export default function FloatingTerminal({
               )}
               <div
                 className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
-                onPointerDown={onResizePointerDown}
-                onPointerMove={onResizePointerMove}
-                onPointerUp={onResizePointerUp}
+                {...resizeHandlers}
                 style={{
                   background: isBusiness
                     ? "linear-gradient(135deg, transparent 50%, rgba(33,115,70,0.3) 50%)"
@@ -518,9 +473,7 @@ export default function FloatingTerminal({
                 )}
                 <div
                   className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
-                  onPointerDown={onResizePointerDown}
-                  onPointerMove={onResizePointerMove}
-                  onPointerUp={onResizePointerUp}
+                  {...resizeHandlers}
                   style={{
                     background:
                       variant === "business"

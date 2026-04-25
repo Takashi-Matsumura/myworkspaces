@@ -2,29 +2,13 @@
 
 import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import {
-  ZoomIn,
-  ZoomOut,
-  Layers,
-  Folder,
-  CodeXml,
-  TerminalSquare,
-} from "lucide-react";
+import { ZoomIn, ZoomOut, Layers, Folder } from "lucide-react";
 import type { View, CanvasActions } from "./demo/components/whiteboard-canvas";
 import type { Workspace } from "./demo/components/floating-workspace";
-import type { TerminalSession } from "./demo/components/floating-terminal";
 import { AccountBadge } from "./demo/components/account-badge";
-
-type PanelId = "workspace" | "coding" | "business" | "ubuntu";
-
-// デフォルトの重なり順。後ろほど手前に来る (末尾が最前面)。
-// 起動直後はターミナルをワークスペースより上に置く。
-const INITIAL_PANEL_ORDER: PanelId[] = [
-  "workspace",
-  "ubuntu",
-  "business",
-  "coding",
-];
+import { usePanels } from "./demo/hooks/use-panels";
+import { TERMINAL_PANEL_DEFINITIONS } from "./demo/config/terminal-panels";
+import type { TerminalPanelId } from "./demo/types/panels";
 
 const WhiteboardCanvas = dynamic(
   () => import("./demo/components/whiteboard-canvas"),
@@ -43,53 +27,25 @@ export default function Home() {
   const canvasRef = useRef<CanvasActions | null>(null);
   const [view, setView] = useState<View>({ x: 0, y: 0, zoom: 1 });
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [codingSession, setCodingSession] = useState<TerminalSession | null>(null);
-  const [businessSession, setBusinessSession] = useState<TerminalSession | null>(null);
-  const [ubuntuSession, setUbuntuSession] = useState<TerminalSession | null>(null);
   const [drawOver, setDrawOver] = useState(false);
-  // Toolbar は Draw Over の時だけ出す (独立トグルは廃止)
-  const showToolbar = drawOver;
   const [containerBusy, setContainerBusy] = useState(false);
-  const [panelOrder, setPanelOrder] = useState<PanelId[]>(INITIAL_PANEL_ORDER);
-
-  const bringToFront = useCallback((id: PanelId) => {
-    setPanelOrder((order) => {
-      if (order[order.length - 1] === id) return order;
-      return [...order.filter((p) => p !== id), id];
-    });
-  }, []);
-
-  // z-index は 40 起点、末尾ほど手前。footer (z-[60]) より下に収める。
-  const zFor = (id: PanelId): number => 40 + panelOrder.indexOf(id);
-  const frontPanel = panelOrder[panelOrder.length - 1];
+  const panels = usePanels();
 
   // ワークスペース切替時は cwd を持つセッションが意味を失うので、
   // setState をまとめて呼ぶラッパーで一緒にクリアする。effect 内の setState は使わない。
-  const handleWorkspaceChange = useCallback((ws: Workspace | null) => {
-    setWorkspace((prev) => {
-      if (prev?.id !== ws?.id) {
-        setCodingSession(null);
-        setBusinessSession(null);
-        setUbuntuSession(null);
-      }
-      return ws;
-    });
-  }, []);
+  const handleWorkspaceChange = useCallback(
+    (ws: Workspace | null) => {
+      setWorkspace((prev) => {
+        if (prev?.id !== ws?.id) panels.clearTerminalSessions();
+        return ws;
+      });
+    },
+    [panels],
+  );
 
-  const startCoding = () => {
+  const openTerminal = (id: TerminalPanelId) => {
     if (!workspace) return;
-    setCodingSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
-    bringToFront("coding");
-  };
-  const startBusiness = () => {
-    if (!workspace) return;
-    setBusinessSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
-    bringToFront("business");
-  };
-  const startUbuntu = () => {
-    if (!workspace) return;
-    setUbuntuSession({ workspaceId: workspace.id, cwd: workspace.cwd, nonce: Date.now() });
-    bringToFront("ubuntu");
+    panels.openTerminal(id, workspace);
   };
 
   // 設定パネルのコンテナタブから呼ばれる。confirm は呼び出し側で出すため、ここでは出さない。
@@ -101,9 +57,7 @@ export default function Home() {
     }
     setContainerBusy(true);
     try {
-      setCodingSession(null);
-      setBusinessSession(null);
-      setUbuntuSession(null);
+      panels.clearTerminalSessions();
       const res = await fetch("/api/container", { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return true;
@@ -113,7 +67,7 @@ export default function Home() {
     } finally {
       setContainerBusy(false);
     }
-  }, [containerBusy]);
+  }, [containerBusy, panels]);
 
   return (
     <main className="fixed inset-0 overflow-hidden">
@@ -121,99 +75,61 @@ export default function Home() {
         onView={setView}
         zoomRef={canvasRef}
         drawOverMode={drawOver}
-        showToolbar={showToolbar}
+        showToolbar={drawOver}
       />
       <FloatingWorkspace
         view={view}
         workspace={workspace}
         onWorkspaceChange={handleWorkspaceChange}
-        onStartCoding={startCoding}
-        onStartBusiness={startBusiness}
-        onStartUbuntu={startUbuntu}
+        onStartCoding={() => openTerminal("coding")}
+        onStartBusiness={() => openTerminal("business")}
+        onStartUbuntu={() => openTerminal("ubuntu")}
         onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
         onResetContainer={resetContainer}
-        z={zFor("workspace")}
-        onFocus={() => bringToFront("workspace")}
+        z={panels.zFor("workspace")}
+        onFocus={() => panels.bringToFront("workspace")}
       />
-      {codingSession && (
-        <FloatingTerminal
-          view={view}
-          session={codingSession}
-          onStop={() => setCodingSession(null)}
-          onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
-          variant="coding"
-          slot="left"
-          z={zFor("coding")}
-          onFocus={() => bringToFront("coding")}
-        />
-      )}
-      {businessSession && (
-        <FloatingTerminal
-          view={view}
-          session={businessSession}
-          onStop={() => setBusinessSession(null)}
-          onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
-          variant="business"
-          slot="right"
-          z={zFor("business")}
-          onFocus={() => bringToFront("business")}
-        />
-      )}
-      {ubuntuSession && (
-        <FloatingTerminal
-          view={view}
-          session={ubuntuSession}
-          onStop={() => setUbuntuSession(null)}
-          onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
-          variant="ubuntu"
-          slot="center"
-          z={zFor("ubuntu")}
-          onFocus={() => bringToFront("ubuntu")}
-        />
-      )}
+      {TERMINAL_PANEL_DEFINITIONS.map((def) => {
+        const session = panels.sessions.get(def.id);
+        if (!session) return null;
+        return (
+          <FloatingTerminal
+            key={def.id}
+            view={view}
+            session={session}
+            onStop={() => panels.closeTerminal(def.id)}
+            onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
+            variant={def.variant}
+            slot={def.slot}
+            z={panels.zFor(def.id)}
+            onFocus={() => panels.bringToFront(def.id)}
+          />
+        );
+      })}
       <footer className="fixed right-0 bottom-0 left-0 z-[60] flex h-8 items-center justify-center gap-1 border-t border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="absolute inset-y-0 left-2 flex items-center gap-2">
           <AccountBadge />
           <PanelSwitcherButton
-            active={frontPanel === "workspace"}
-            onClick={() => bringToFront("workspace")}
+            active={panels.frontPanel === "workspace"}
+            onClick={() => panels.bringToFront("workspace")}
             label="Workspace"
             title="Workspace パネルを最前面に"
           >
             <Folder className="h-3 w-3" />
           </PanelSwitcherButton>
-          {codingSession && (
-            <PanelSwitcherButton
-              active={frontPanel === "coding"}
-              onClick={() => bringToFront("coding")}
-              label="Coding"
-              title="Coding パネルを最前面に"
-              accent="#15151c"
-            >
-              <CodeXml className="h-3 w-3" />
-            </PanelSwitcherButton>
-          )}
-          {businessSession && (
-            <PanelSwitcherButton
-              active={frontPanel === "business"}
-              onClick={() => bringToFront("business")}
-              label="Business"
-              title="Business パネルを最前面に"
-              accent="#217346"
-            >
-              <CodeXml className="h-3 w-3" />
-            </PanelSwitcherButton>
-          )}
-          {ubuntuSession && (
-            <PanelSwitcherButton
-              active={frontPanel === "ubuntu"}
-              onClick={() => bringToFront("ubuntu")}
-              label="Shell"
-              title="Shell パネル (ubuntu / bash) を最前面に"
-              accent="#4f46e5"
-            >
-              <TerminalSquare className="h-3 w-3" />
-            </PanelSwitcherButton>
+          {TERMINAL_PANEL_DEFINITIONS.map((def) =>
+            panels.sessions.has(def.id) ? (
+              <PanelSwitcherButton
+                key={def.id}
+                active={panels.frontPanel === def.id}
+                onClick={() => panels.bringToFront(def.id)}
+                label={def.switcherLabel}
+                title={def.switcherTitle}
+                accent={def.switcherAccent}
+              >
+                {def.switcherIcon}
+              </PanelSwitcherButton>
+            ) : null,
           )}
         </div>
         <button

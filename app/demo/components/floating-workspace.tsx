@@ -31,6 +31,12 @@ import type { View } from "./whiteboard-canvas";
 import SettingsPanel from "./settings-panel";
 import FilePreview from "./file-preview";
 import type { PreviewResult } from "@/lib/preview";
+import { usePointerDrag } from "../hooks/use-pointer-drag";
+import { usePointerResize } from "../hooks/use-pointer-resize";
+import { useFontSize } from "../hooks/use-font-size";
+import { use3dFlip } from "../hooks/use-3d-flip";
+import { useLocalStorageBoolean } from "../hooks/use-local-storage-boolean";
+import { STORAGE_KEYS } from "../lib/storage-keys";
 
 type ContainerInfo = {
   exists: boolean;
@@ -388,7 +394,7 @@ export default function FloatingWorkspace({
   z: number;
   onFocus?: () => void;
 }) {
-  const [flipped, setFlipped] = useState(false);
+  const { flipped, setFlipped } = use3dFlip(false);
   // 初期位置は window 参照が必要だが、SSR 時は window が無いので lazy initializer の中で分岐。
   const [scenePos, setScenePos] = useState<ScenePos>(() => {
     if (typeof window === "undefined") return { x: 60, y: 60 };
@@ -400,29 +406,15 @@ export default function FloatingWorkspace({
   const [sceneSize, setSceneSize] = useState<SceneSize>({ w: 640, h: 460 });
 
   const [splitPct, setSplitPct] = useState(45);
-  const [fontSize, setFontSize] = useState(() => {
-    if (typeof window === "undefined") return 12;
-    const saved = localStorage.getItem("workspace-fontSize");
-    return saved ? Number(saved) : 12;
+  const { fontSize, changeFontSize } = useFontSize(STORAGE_KEYS.workspaceFontSize, {
+    default: 12,
+    min: 10,
+    max: 20,
   });
-  const changeFontSize = (delta: number) => {
-    setFontSize((prev) => {
-      const next = Math.min(20, Math.max(10, prev + delta));
-      localStorage.setItem("workspace-fontSize", String(next));
-      return next;
-    });
-  };
-  const [showHidden, setShowHidden] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("workspace-showHidden") === "1";
-  });
-  const toggleShowHidden = () => {
-    setShowHidden((prev) => {
-      const next = !prev;
-      localStorage.setItem("workspace-showHidden", next ? "1" : "0");
-      return next;
-    });
-  };
+  const { value: showHidden, toggle: toggleShowHidden } = useLocalStorageBoolean(
+    STORAGE_KEYS.workspaceShowHidden,
+    false,
+  );
   const [childEntries, setChildEntries] = useState<Map<string, Entry[]>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -479,43 +471,16 @@ export default function FloatingWorkspace({
   // openWorkspace は下で定義されるので、effect 本体はマウント後に実行される。
   const autoOpenedRef = useRef(false);
 
-  const dragRef = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
-  const resizeRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null);
   const splitRef = useRef<{ sx: number; startPct: number; containerW: number } | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
-  const onHeaderPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest("button,input")) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = { sx: e.clientX, sy: e.clientY, px: scenePos.x, py: scenePos.y };
-  };
-  const onHeaderPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return;
-    const d = dragRef.current;
-    setScenePos({ x: d.px + (e.clientX - d.sx) / view.zoom, y: d.py + (e.clientY - d.sy) / view.zoom });
-  };
-  const onHeaderPointerUp = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    dragRef.current = null;
-  };
-
-  const onResizePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resizeRef.current = { sx: e.clientX, sy: e.clientY, sw: sceneSize.w, sh: sceneSize.h };
-  };
-  const onResizePointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!resizeRef.current) return;
-    const r = resizeRef.current;
-    setSceneSize({
-      w: Math.max(360, r.sw + (e.clientX - r.sx) / view.zoom),
-      h: Math.max(220, r.sh + (e.clientY - r.sy) / view.zoom),
-    });
-  };
-  const onResizePointerUp = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    resizeRef.current = null;
-  };
+  const headerHandlers = usePointerDrag(view, scenePos, setScenePos, {
+    skipSelector: "button,input",
+  });
+  const resizeHandlers = usePointerResize(view, sceneSize, setSceneSize, {
+    minW: 360,
+    minH: 220,
+  });
 
   const onSplitPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
@@ -804,9 +769,7 @@ export default function FloatingWorkspace({
         >
       <div
         className="flex h-9 cursor-grab items-center justify-between gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 text-xs text-slate-600 active:cursor-grabbing select-none"
-        onPointerDown={onHeaderPointerDown}
-        onPointerMove={onHeaderPointerMove}
-        onPointerUp={onHeaderPointerUp}
+        {...headerHandlers}
       >
         <div className="flex items-center gap-2">
           <button
@@ -1086,9 +1049,7 @@ export default function FloatingWorkspace({
           </div>
           <div
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
-            onPointerDown={onResizePointerDown}
-            onPointerMove={onResizePointerMove}
-            onPointerUp={onResizePointerUp}
+            {...resizeHandlers}
             style={{ background: "linear-gradient(135deg, transparent 50%, rgba(100,116,139,0.4) 50%)" }}
           />
         </div>
@@ -1107,9 +1068,7 @@ export default function FloatingWorkspace({
         >
           <div
             className="flex h-9 cursor-grab items-center justify-between gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 text-xs text-slate-600 active:cursor-grabbing select-none"
-            onPointerDown={onHeaderPointerDown}
-            onPointerMove={onHeaderPointerMove}
-            onPointerUp={onHeaderPointerUp}
+            {...headerHandlers}
           >
             <div className="flex items-center gap-2">
               <button
@@ -1133,9 +1092,7 @@ export default function FloatingWorkspace({
           <SettingsPanel onResetContainer={onResetContainer} />
           <div
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
-            onPointerDown={onResizePointerDown}
-            onPointerMove={onResizePointerMove}
-            onPointerUp={onResizePointerUp}
+            {...resizeHandlers}
             style={{ background: "linear-gradient(135deg, transparent 50%, rgba(100,116,139,0.4) 50%)" }}
           />
         </div>
