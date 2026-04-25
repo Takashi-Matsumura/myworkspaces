@@ -109,17 +109,25 @@ const businessTabs: BackTab[] = [
   },
 ];
 
-function defaultSlotOffset(slot: "left" | "center" | "right"): { cx: number; cy: number } {
-  if (typeof window === "undefined") return { cx: 80, cy: 80 };
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  if (slot === "left") {
-    return { cx: Math.max(0, w * 0.25 - 360), cy: Math.max(0, (h - 440) / 2) };
-  }
-  if (slot === "right") {
-    return { cx: w * 0.55, cy: Math.max(0, (h - 440) / 2) };
-  }
-  return { cx: Math.max(0, (w - 720) / 2), cy: Math.max(0, (h - 440) / 2) };
+// 現在表示しているホワイトボードの「中心」にパネルを置きたい。
+// パネルは scenePos (シーン座標) で位置を持ち、画面上は
+//   left = (scenePos.x + view.x) * view.zoom
+// で描画される。よってビューポート中心 (window.innerWidth/2, innerHeight/2) に
+// パネル中央が来るように逆算すると:
+//   scenePos.x = (innerWidth/2) / view.zoom - sceneSize.w/2 - view.x
+// 3 つ同時に開いた時に完全重複しないよう、slot 別に少しだけオフセットする
+// (シーン座標での値なので zoom 不変)。
+function defaultScenePos(
+  slot: "left" | "center" | "right",
+  view: View,
+  size: { w: number; h: number },
+): { x: number; y: number } {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  const baseX = window.innerWidth / 2 / view.zoom - size.w / 2 - view.x;
+  const baseY = window.innerHeight / 2 / view.zoom - size.h / 2 - view.y;
+  const dx = slot === "left" ? -40 : slot === "right" ? 40 : 0;
+  const dy = slot === "left" ? -20 : slot === "right" ? 20 : 0;
+  return { x: baseX + dx, y: baseY + dy };
 }
 
 export default function FloatingTerminal({
@@ -143,10 +151,10 @@ export default function FloatingTerminal({
 }) {
   const style = VARIANT_STYLES[variant];
 
-  const [scenePos, setScenePos] = useState<ScenePos>(() => {
-    const { cx, cy } = defaultSlotOffset(slot);
-    return { x: cx, y: cy };
-  });
+  // マウント時の view を一度だけ参照して中心位置を決定。以降ユーザがドラッグで自由に動かせる。
+  const [scenePos, setScenePos] = useState<ScenePos>(() =>
+    defaultScenePos(slot, view, { w: 720, h: 440 }),
+  );
   const [sceneSize, setSceneSize] = useState<SceneSize>({ w: 720, h: 440 });
   const [minimized, setMinimized] = useState(false);
   const { flipped, setFlipped } = use3dFlip(false);
