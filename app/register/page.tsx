@@ -5,23 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-// デモ用サンプルアカウント。
-// demo/demo は scripts/seed-demo-user.mjs で作成。
-// alice / bob は Phase 2 開発中に curl で登録した E2E テスト用。
-// 本物のパスワード管理ではないので、ここに平文で載せてよい。
-const DEMO_ACCOUNTS: Array<{ username: string; password: string }> = [
-  { username: "demo", password: "demo" },
-  { username: "alice", password: "securepass123" },
-  { username: "bob", password: "hunter2bob" },
-];
-
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // submitting: API 通信中 (エラー時は解除)
-  // transitioning: ログイン成功後、/ の重い初期化 (Excalidraw 等) が終わるまで解除しない
   const [submitting, setSubmitting] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const busy = submitting || transitioning;
@@ -31,16 +19,13 @@ export default function LoginPage() {
     if (busy) return;
     setError(null);
     setSubmitting(true);
-    // オーバーレイがブラウザに paint されるのを 1 フレーム待ってから fetch を開始する。
-    // これを挟まないと localhost の高速 API (〜100ms) では commit と
-    // router.replace が詰まり、スピナーがほぼ表示されないまま画面が切り替わる。
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
     const startedAt = performance.now();
-    const MIN_MS = 400; // 速すぎる応答でもスピナーが一瞬見えるように下限を設ける
+    const MIN_MS = 400;
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -55,8 +40,7 @@ export default function LoginPage() {
         setSubmitting(false);
         return;
       }
-      // 成功時は submitting を解除せず transitioning に移す。
-      // router.replace の完了 (= このページの unmount) までオーバーレイを出し続ける。
+      // 登録 API 側でセッション Cookie が立つので、そのまま / へ遷移する。
       setTransitioning(true);
       router.replace("/");
       router.refresh();
@@ -74,7 +58,7 @@ export default function LoginPage() {
         }`}
       >
         <h1 className="text-xl font-semibold text-neutral-900 mb-1">myworkspaces</h1>
-        <p className="text-sm text-neutral-500 mb-6">ログイン</p>
+        <p className="text-sm text-neutral-500 mb-6">新規アカウント登録</p>
 
         <form onSubmit={submit} className="space-y-4">
           <fieldset disabled={busy} className="space-y-4">
@@ -89,6 +73,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400 disabled:bg-neutral-100"
+                placeholder="3〜32 文字の英数字 / _ . -"
               />
             </div>
             <div>
@@ -97,11 +82,12 @@ export default function LoginPage() {
               </label>
               <input
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400 disabled:bg-neutral-100"
+                placeholder="8 文字以上"
               />
             </div>
 
@@ -119,54 +105,23 @@ export default function LoginPage() {
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               <span>
                 {submitting
-                  ? "認証中..."
+                  ? "作成中..."
                   : transitioning
                   ? "読み込み中..."
-                  : "ログイン"}
+                  : "アカウントを作成"}
               </span>
             </button>
           </fieldset>
         </form>
 
-        <div className="mt-4 flex items-center justify-between text-xs text-neutral-500">
+        <div className="mt-4 text-xs text-neutral-500">
+          既にアカウントをお持ちの方は{" "}
           <Link
-            href="/register"
+            href="/login"
             className="text-neutral-700 underline-offset-2 hover:text-neutral-900 hover:underline"
           >
-            新規登録
+            ログイン
           </Link>
-          <Link
-            href="/forgot-password"
-            className="text-neutral-700 underline-offset-2 hover:text-neutral-900 hover:underline"
-          >
-            パスワードを忘れた
-          </Link>
-        </div>
-
-        <div className="mt-6 pt-4 border-t border-dashed border-neutral-200">
-          <p className="text-[11px] font-medium text-neutral-500 mb-2">
-            デモ用アカウント <span className="text-neutral-400">(クリックで入力)</span>
-          </p>
-          <ul className="space-y-1">
-            {DEMO_ACCOUNTS.map((a) => (
-              <li key={a.username}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setUsername(a.username);
-                    setPassword(a.password);
-                    setError(null);
-                  }}
-                  className="w-full inline-flex items-center justify-between gap-2 rounded px-2 py-1 font-mono text-[11px] text-neutral-600 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="text-neutral-800">{a.username}</span>
-                  <span className="text-neutral-400">/</span>
-                  <span className="flex-1 text-left">{a.password}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
 
@@ -180,7 +135,7 @@ export default function LoginPage() {
           <div className="flex items-center gap-3 rounded-lg bg-white border border-neutral-200 shadow-lg px-5 py-4">
             <Loader2 className="h-5 w-5 animate-spin text-neutral-700" />
             <span className="text-sm text-neutral-800">
-              {submitting ? "認証しています..." : "ワークスペースを読み込んでいます..."}
+              {submitting ? "アカウントを作成しています..." : "ワークスペースを読み込んでいます..."}
             </span>
           </div>
         </div>

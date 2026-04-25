@@ -4,13 +4,17 @@ import { NextResponse, type NextRequest } from "next/server";
 // import できないので、ここに定数を持たせる。
 const SESSION_COOKIE = "mw_session";
 
+// 認証フロー用 (login / register / forgot-password) のページは未ログインで通過、
+// ログイン済みなら / にリダイレクトする「認証ゲート群」。
+const AUTH_PAGES = new Set(["/login", "/register", "/forgot-password"]);
+
 // UI ページのみガードする (API は各ルートで 401 を返すので二重ガード不要)。
 // Cookie の「存在」だけで判定し、失効検証はリクエスト先 (route / ws) に任せる。
 export function proxy(req: NextRequest) {
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
   const { pathname } = req.nextUrl;
 
-  if (pathname === "/login") {
+  if (AUTH_PAGES.has(pathname)) {
     if (hasSession) {
       return NextResponse.redirect(new URL("/", req.url));
     }
@@ -26,5 +30,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login"],
+  matcher: ["/", "/login", "/register", "/forgot-password"],
 };
