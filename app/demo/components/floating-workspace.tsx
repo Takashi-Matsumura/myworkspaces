@@ -971,10 +971,10 @@ export default function FloatingWorkspace({
             onClick={onStartUbuntu}
             disabled={!workspace}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-indigo-700 bg-indigo-700 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            title={workspace ? `Bash パネルを ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
+            title={workspace ? `Shell パネル (ubuntu / bash) を ${workspace.cwd} で起動` : "先にワークスペースを選択してください"}
           >
             <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
-            Bash
+            Shell
           </button>
         </div>
 
