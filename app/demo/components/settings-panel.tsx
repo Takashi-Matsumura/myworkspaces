@@ -1,52 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useMount } from "../hooks/use-mount";
+import { useState } from "react";
 import {
   Settings as SettingsIcon,
   Sliders,
   Palette,
   Container as ContainerIcon,
   Info,
-  RefreshCw,
   Save,
   Check,
-  Eye,
-  EyeOff,
   ShieldCheck,
 } from "lucide-react";
-
-type Provider = "llama-server" | "anthropic" | "openai";
-type CursorStyle = "bar" | "block" | "underline";
-
-type SettingsShape = {
-  opencode: {
-    provider: Provider;
-    endpoint: string;
-    model: string;
-    apiKey: string; // UI では plain を保持
-  };
-  appearance: {
-    defaultFontSize: number;
-    defaultPanelWidth: number;
-    defaultPanelHeight: number;
-    cursorStyle: CursorStyle;
-    scrollback: number;
-  };
-};
-
-type ContainerStatus = {
-  exists: boolean;
-  running: boolean;
-  networkMode?: string;
-  isolated?: boolean;
-};
-
-type NetworkStatus = {
-  requested: boolean;
-  effective: boolean | null;
-  networkMode: string | null;
-};
+import { useSettingsLoader } from "./settings/use-settings-loader";
+import { OpencodeTab } from "./settings/opencode-tab";
+import { AppearanceTab } from "./settings/appearance-tab";
+import { NetworkTab } from "./settings/network-tab";
+import { ContainerTab } from "./settings/container-tab";
+import { InfoTab } from "./settings/info-tab";
 
 type TabKey = "opencode" | "appearance" | "network" | "container" | "info";
 
@@ -58,212 +28,37 @@ const TABS: { key: TabKey; label: string; icon: typeof Sliders }[] = [
   { key: "info", label: "情報", icon: Info },
 ];
 
-const DEFAULT_MODELS: Record<Provider, string> = {
-  "llama-server": "gemma-4-e4b-it-Q4_K_M.gguf",
-  anthropic: "claude-sonnet-4-6",
-  openai: "gpt-4o",
-};
-
-function decodeBase64(s: string): string {
-  if (!s) return "";
-  try {
-    if (typeof window === "undefined") return "";
-    return window.atob(s);
-  } catch {
-    return "";
-  }
-}
-
 export default function SettingsPanel({
   onResetContainer,
 }: {
-  onResetContainer: () => Promise<boolean>; // returns true on success
+  onResetContainer: () => Promise<boolean>;
 }) {
   const [tab, setTab] = useState<TabKey>("opencode");
-  const [settings, setSettings] = useState<SettingsShape | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [apiKeyVisible, setApiKeyVisible] = useState(false);
-
-  const [containerStatus, setContainerStatus] = useState<ContainerStatus | null>(null);
-  const [containerBusy, setContainerBusy] = useState(false);
-
-  const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
-  const [networkBusy, setNetworkBusy] = useState(false);
-
-  const [rulesSyncing, setRulesSyncing] = useState(false);
-  const [rulesSyncResult, setRulesSyncResult] = useState<string | null>(null);
-
-  const loadSettings = useCallback(async () => {
-    try {
-      const res = await fetch("/api/settings", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { settings: SettingsShape };
-      setSettings({
-        ...data.settings,
-        opencode: {
-          ...data.settings.opencode,
-          apiKey: decodeBase64(data.settings.opencode.apiKey),
-        },
-      });
-      setDirty(false);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-
-  const loadContainer = useCallback(async () => {
-    try {
-      const res = await fetch("/api/container", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as ContainerStatus;
-      setContainerStatus(data);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-
-  const loadNetwork = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user/network", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as NetworkStatus;
-      setNetworkStatus(data);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-
-  const toggleNetwork = useCallback(
-    async (next: boolean) => {
-      if (networkBusy) return;
-      const msg = next
-        ? "ネットワーク隔離を ON にします。コンテナが再作成され、実行中のターミナルはすべて閉じます。/root の作業ファイルは保持されます。続けますか？"
-        : "ネットワーク隔離を OFF にします。コンテナが再作成され、実行中のターミナルはすべて閉じます。/root の作業ファイルは保持されます。続けますか？";
-      if (typeof window !== "undefined" && !window.confirm(msg)) return;
-      setNetworkBusy(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/user/network", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isolated: next }),
-        });
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `HTTP ${res.status}`);
-        }
-        await Promise.all([loadNetwork(), loadContainer()]);
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        setNetworkBusy(false);
-      }
-    },
-    [networkBusy, loadNetwork, loadContainer],
-  );
-
-  // 初回マウント時に 1 回だけ取得。
-  useMount(() => {
-    void loadSettings();
-    void loadContainer();
-    void loadNetwork();
-  });
-
-  useEffect(() => {
-    if (!saved) return;
-    const t = setTimeout(() => setSaved(false), 2000);
-    return () => clearTimeout(t);
-  }, [saved]);
-
-  const updateOpencode = <K extends keyof SettingsShape["opencode"]>(
-    key: K,
-    value: SettingsShape["opencode"][K],
-  ) => {
-    setSettings((s) => (s ? { ...s, opencode: { ...s.opencode, [key]: value } } : s));
-    setDirty(true);
-  };
-
-  const updateAppearance = <K extends keyof SettingsShape["appearance"]>(
-    key: K,
-    value: SettingsShape["appearance"][K],
-  ) => {
-    setSettings((s) => (s ? { ...s, appearance: { ...s.appearance, [key]: value } } : s));
-    setDirty(true);
-  };
-
-  const save = useCallback(async () => {
-    if (!settings) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
-      setDirty(false);
-      setSaved(true);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }, [settings]);
-
-  const syncAllRules = useCallback(async () => {
-    if (rulesSyncing) return;
-    setRulesSyncing(true);
-    setRulesSyncResult(null);
-    setError(null);
-    try {
-      const listRes = await fetch("/api/user/workspaces", { cache: "no-store" });
-      if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
-      const { workspaces } = (await listRes.json()) as {
-        workspaces: { id: string; label: string }[];
-      };
-      if (!workspaces.length) {
-        setRulesSyncResult("対象ワークスペースなし");
-        return;
-      }
-      let ok = 0;
-      let fail = 0;
-      for (const ws of workspaces) {
-        const res = await fetch(
-          `/api/user/workspaces/${encodeURIComponent(ws.id)}/sync-rules`,
-          { method: "POST" },
-        );
-        if (res.ok) ok += 1;
-        else fail += 1;
-      }
-      setRulesSyncResult(
-        fail === 0
-          ? `${ok}/${workspaces.length} 件すべて同期しました`
-          : `成功 ${ok} 件 / 失敗 ${fail} 件`,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setRulesSyncing(false);
-    }
-  }, [rulesSyncing]);
-
-  const handleReset = useCallback(async () => {
-    if (containerBusy) return;
-    setContainerBusy(true);
-    try {
-      const ok = await onResetContainer();
-      if (ok) await loadContainer();
-    } finally {
-      setContainerBusy(false);
-    }
-  }, [containerBusy, loadContainer, onResetContainer]);
+  const {
+    settings,
+    dirty,
+    saving,
+    saved,
+    error,
+    apiKeyVisible,
+    containerStatus,
+    containerBusy,
+    networkStatus,
+    networkBusy,
+    rulesSyncing,
+    rulesSyncResult,
+    setSettings,
+    setDirty,
+    setApiKeyVisible,
+    loadContainer,
+    loadNetwork,
+    toggleNetwork,
+    updateOpencode,
+    updateAppearance,
+    save,
+    syncAllRules,
+    handleReset,
+  } = useSettingsLoader({ onResetContainer });
 
   if (!settings) {
     return (
@@ -306,421 +101,42 @@ export default function SettingsPanel({
 
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
         {tab === "opencode" && (
-          <div className="flex flex-col gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Provider</label>
-              <select
-                value={settings.opencode.provider}
-                onChange={(e) => {
-                  const p = e.target.value as Provider;
-                  setSettings((s) =>
-                    s
-                      ? {
-                          ...s,
-                          opencode: {
-                            ...s.opencode,
-                            provider: p,
-                            model: s.opencode.model || DEFAULT_MODELS[p],
-                          },
-                        }
-                      : s,
-                  );
-                  setDirty(true);
-                }}
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
-              >
-                <option value="llama-server">llama-server (local)</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="openai">OpenAI</option>
-              </select>
-              <p className="mt-1 text-[10px] text-slate-400">
-                この設定は新規作成するワークスペースの <code>opencode.json</code> に反映されます（既存のものは変わりません）。
-              </p>
-            </div>
-
-            {settings.opencode.provider === "llama-server" && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Endpoint URL</label>
-                <input
-                  type="text"
-                  value={settings.opencode.endpoint}
-                  onChange={(e) => updateOpencode("endpoint", e.target.value)}
-                  placeholder="http://host.docker.internal:8080"
-                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  コンテナからホストの llama-server に到達するパス。末尾に <code>/v1</code> は付けない。
-                </p>
-              </div>
-            )}
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Model</label>
-              <input
-                type="text"
-                value={settings.opencode.model}
-                onChange={(e) => updateOpencode("model", e.target.value)}
-                placeholder={DEFAULT_MODELS[settings.opencode.provider]}
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
-              />
-            </div>
-
-            {(settings.opencode.provider === "anthropic" ||
-              settings.opencode.provider === "openai") && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">API Key</label>
-                <div className="flex gap-1">
-                  <input
-                    type={apiKeyVisible ? "text" : "password"}
-                    value={settings.opencode.apiKey}
-                    onChange={(e) => updateOpencode("apiKey", e.target.value)}
-                    placeholder={settings.opencode.provider === "anthropic" ? "sk-ant-..." : "sk-..."}
-                    className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setApiKeyVisible((v) => !v)}
-                    className="shrink-0 rounded border border-slate-300 px-2 text-slate-500 hover:bg-slate-50"
-                    title={apiKeyVisible ? "非表示" : "表示"}
-                  >
-                    {apiKeyVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-                <p className="mt-1 text-[10px] text-amber-600">
-                  ⚠ base64 エンコードのみで保存されます（暗号化ではありません）。
-                </p>
-              </div>
-            )}
-
-            <div className="mt-2 rounded border border-slate-200 bg-slate-50 p-3">
-              <div className="mb-1 text-xs font-medium text-slate-700">ルールファイルの同期</div>
-              <p className="mb-2 text-[11px] leading-relaxed text-slate-600">
-                テンプレートの <code>*-rules.md</code>（language / vision / business / pdf / coding）を
-                既存の全ワークスペースに上書き配布し、<code>opencode.json</code> の
-                <code>instructions</code> と <code>agent</code>（plan/build の temperature・top_p）の
-                不足分も追加します。既存の個別設定値は保持されます。
-              </p>
-              <button
-                type="button"
-                onClick={() => void syncAllRules()}
-                disabled={rulesSyncing}
-                className="inline-flex items-center gap-1 rounded border border-sky-300 bg-white px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${rulesSyncing ? "animate-spin" : ""}`} />
-                {rulesSyncing ? "同期中…" : "ルールを最新テンプレートに同期"}
-              </button>
-              {rulesSyncResult && (
-                <div className="mt-2 font-mono text-[11px] text-emerald-700">
-                  {rulesSyncResult}
-                </div>
-              )}
-            </div>
-          </div>
+          <OpencodeTab
+            settings={settings}
+            setSettings={setSettings}
+            setDirty={setDirty}
+            updateOpencode={updateOpencode}
+            apiKeyVisible={apiKeyVisible}
+            setApiKeyVisible={setApiKeyVisible}
+            rulesSyncing={rulesSyncing}
+            rulesSyncResult={rulesSyncResult}
+            syncAllRules={() => void syncAllRules()}
+          />
         )}
 
         {tab === "appearance" && (
-          <div className="flex flex-col gap-4">
-            <p className="text-[10px] leading-relaxed text-slate-500">
-              下記はすべて新規に開くターミナル (Code / Biz / Shell) に適用される
-              デフォルト値です。既に開いているパネルには影響しません。
-            </p>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                ターミナルのデフォルトフォントサイズ
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={10}
-                  max={28}
-                  value={settings.appearance.defaultFontSize}
-                  onChange={(e) => updateAppearance("defaultFontSize", Number(e.target.value))}
-                  className="flex-1"
-                />
-                <span className="w-10 text-right font-mono text-xs text-slate-700">
-                  {settings.appearance.defaultFontSize}px
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                ターミナルのデフォルトウィンドウサイズ
-              </label>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-10 text-right font-mono text-[10px] text-slate-500">幅</span>
-                  <input
-                    type="range"
-                    min={360}
-                    max={1600}
-                    step={20}
-                    value={settings.appearance.defaultPanelWidth}
-                    onChange={(e) => updateAppearance("defaultPanelWidth", Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="w-14 text-right font-mono text-xs text-slate-700">
-                    {settings.appearance.defaultPanelWidth}px
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-10 text-right font-mono text-[10px] text-slate-500">高さ</span>
-                  <input
-                    type="range"
-                    min={220}
-                    max={1200}
-                    step={20}
-                    value={settings.appearance.defaultPanelHeight}
-                    onChange={(e) => updateAppearance("defaultPanelHeight", Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="w-14 text-right font-mono text-xs text-slate-700">
-                    {settings.appearance.defaultPanelHeight}px
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                カーソル形状
-              </label>
-              <select
-                value={settings.appearance.cursorStyle}
-                onChange={(e) => updateAppearance("cursorStyle", e.target.value as CursorStyle)}
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
-              >
-                <option value="bar">bar (縦線、デフォルト)</option>
-                <option value="block">block (塗りつぶし)</option>
-                <option value="underline">underline (下線)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                スクロールバック行数
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={500}
-                  max={50000}
-                  step={500}
-                  value={settings.appearance.scrollback}
-                  onChange={(e) => updateAppearance("scrollback", Number(e.target.value))}
-                  className="flex-1"
-                />
-                <span className="w-16 text-right font-mono text-xs text-slate-700">
-                  {settings.appearance.scrollback.toLocaleString()}行
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] text-slate-400">
-                ターミナルが保持する過去出力の行数。多いほどメモリを使うので
-                通常は 10,000 行前後で十分。
-              </p>
-            </div>
-          </div>
+          <AppearanceTab settings={settings} updateAppearance={updateAppearance} />
         )}
 
         {tab === "network" && (
-          <div className="flex flex-col gap-3">
-            <div className="rounded border border-slate-200 bg-slate-50 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600">ネットワーク隔離</span>
-                <button
-                  type="button"
-                  onClick={() => void loadNetwork()}
-                  className="rounded p-1 text-slate-500 hover:bg-white"
-                  title="再取得"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </button>
-              </div>
-
-              {networkStatus ? (
-                <>
-                  <div className="mb-3 flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => void toggleNetwork(!networkStatus.requested)}
-                      disabled={networkBusy}
-                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                        networkStatus.requested ? "bg-emerald-500" : "bg-slate-300"
-                      } disabled:opacity-50`}
-                      role="switch"
-                      aria-checked={networkStatus.requested}
-                      title={networkStatus.requested ? "ON → OFF" : "OFF → ON"}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                          networkStatus.requested ? "translate-x-5" : "translate-x-0.5"
-                        }`}
-                      />
-                    </button>
-                    <div className="font-mono text-[11px] text-slate-700">
-                      {networkBusy
-                        ? "切り替え中…"
-                        : networkStatus.requested
-                          ? "隔離: ON"
-                          : "隔離: OFF"}
-                    </div>
-                  </div>
-
-                  <p className="mb-2 text-[11px] leading-relaxed text-slate-600">
-                    ON にするとコンテナから <code>example.com</code> などの外部インター
-                    ネットには到達できなくなります。ホスト上の llama-server
-                    (<code>host.docker.internal:8080</code>) への接続は引き続き可能です。
-                    ただし Claude Code など、ホスト外の API
-                    (<code>api.anthropic.com</code> 等) を必要とするツールは隔離 ON では
-                    利用できません。
-                  </p>
-
-                  <div className="mt-2 flex flex-col gap-1 font-mono text-[10px] text-slate-500">
-                    <div className="flex items-center gap-2">
-                      <span className="w-16 text-slate-400">設定値</span>
-                      <span
-                        className={`h-2 w-2 rounded-full ${
-                          networkStatus.requested ? "bg-emerald-500" : "bg-slate-400"
-                        }`}
-                      />
-                      <span>{networkStatus.requested ? "ON" : "OFF"}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-16 text-slate-400">実効</span>
-                      <span
-                        className={`h-2 w-2 rounded-full ${
-                          networkStatus.effective === null
-                            ? "bg-slate-300"
-                            : networkStatus.effective
-                              ? "bg-emerald-500"
-                              : "bg-slate-400"
-                        }`}
-                      />
-                      <span>
-                        {networkStatus.effective === null
-                          ? "コンテナ未作成 (次回起動で反映)"
-                          : networkStatus.effective
-                            ? "ON"
-                            : "OFF"}
-                      </span>
-                    </div>
-                    {networkStatus.networkMode && (
-                      <div className="flex items-center gap-2">
-                        <span className="w-16 text-slate-400">network</span>
-                        <span>{networkStatus.networkMode}</span>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="font-mono text-[11px] text-slate-400">loading…</div>
-              )}
-            </div>
-
-            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-800">
-              ⚠ 切り替えるとコンテナが再作成され、実行中のターミナルはすべて閉じます。
-              <code>/root</code> のファイルは named volume に保存されているため失われません。
-            </div>
-          </div>
+          <NetworkTab
+            networkStatus={networkStatus}
+            networkBusy={networkBusy}
+            loadNetwork={() => void loadNetwork()}
+            toggleNetwork={(next) => void toggleNetwork(next)}
+          />
         )}
 
         {tab === "container" && (
-          <div className="flex flex-col gap-3">
-            <div className="rounded border border-slate-200 bg-slate-50 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600">コンテナ状態</span>
-                <button
-                  type="button"
-                  onClick={() => void loadContainer()}
-                  className="rounded p-1 text-slate-500 hover:bg-white"
-                  title="再取得"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </button>
-              </div>
-              {containerStatus ? (
-                <div className="flex items-center gap-2 font-mono text-[11px]">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      containerStatus.running
-                        ? "bg-emerald-500"
-                        : containerStatus.exists
-                          ? "bg-amber-400"
-                          : "bg-slate-300"
-                    }`}
-                  />
-                  <span className="text-slate-700">
-                    {containerStatus.running
-                      ? "running"
-                      : containerStatus.exists
-                        ? "stopped"
-                        : "not created"}
-                  </span>
-                </div>
-              ) : (
-                <div className="font-mono text-[11px] text-slate-400">loading…</div>
-              )}
-            </div>
-
-            <div className="rounded border border-rose-200 bg-rose-50 p-3">
-              <div className="mb-1 text-xs font-medium text-rose-800">コンテナを作り直す</div>
-              <p className="mb-2 text-[11px] text-rose-700">
-                <code>/root</code> の named volume（ワークスペース実体）は保持されますが、
-                コンテナ内で <code>apt install</code> した追加パッケージや <code>/tmp</code> 等はすべて失われます。
-                アクティブなターミナルもすべて閉じます。
-              </p>
-              <button
-                type="button"
-                onClick={() => void handleReset()}
-                disabled={containerBusy}
-                className="inline-flex items-center gap-1 rounded border border-rose-300 bg-white px-3 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${containerBusy ? "animate-spin" : ""}`} />
-                {containerBusy ? "作り直し中…" : "コンテナを作り直す"}
-              </button>
-            </div>
-          </div>
+          <ContainerTab
+            containerStatus={containerStatus}
+            containerBusy={containerBusy}
+            loadContainer={() => void loadContainer()}
+            handleReset={() => void handleReset()}
+          />
         )}
 
-        {tab === "info" && (
-          <div className="flex flex-col gap-2 font-mono text-[11px] text-slate-600">
-            <div className="flex gap-2">
-              <span className="w-24 text-slate-400">sub</span>
-              <span>demo</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="w-24 text-slate-400">image</span>
-              <span>myworkspaces-sandbox:latest</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="w-24 text-slate-400">container</span>
-              <span>myworkspaces-shell-demo</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="w-24 text-slate-400">volume</span>
-              <span>myworkspaces-home-demo</span>
-            </div>
-            <div className="mt-3 flex flex-col gap-1">
-              <a
-                href="https://github.com/Takashi-Matsumura/myworkspaces"
-                target="_blank"
-                rel="noreferrer"
-                className="text-sky-700 hover:underline"
-              >
-                GitHub: Takashi-Matsumura/myworkspaces
-              </a>
-              <a
-                href="https://opencode.ai/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-sky-700 hover:underline"
-              >
-                OpenCode
-              </a>
-            </div>
-          </div>
-        )}
+        {tab === "info" && <InfoTab />}
       </div>
 
       {/* 保存バー */}
