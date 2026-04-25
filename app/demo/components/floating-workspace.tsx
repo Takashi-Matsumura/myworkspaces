@@ -580,7 +580,7 @@ export default function FloatingWorkspace({
   }, [registered, workspace, openWorkspace]);
 
   const createWorkspace = useCallback(async () => {
-    const label = prompt("新しいワークスペースの名前を入力", "project");
+    const label = prompt("新しいワークスペースの名前を入力", "workspace");
     if (!label || !label.trim()) return;
     setBusy(true);
     setError(null);
@@ -769,7 +769,7 @@ export default function FloatingWorkspace({
           >
             <Maximize2 className="hidden h-2.5 w-2.5 stroke-[3] text-black/60 group-hover:block" style={{ margin: "0.5px" }} />
           </button>
-          <span className="font-mono font-medium text-slate-700">workspace</span>
+          <span className="font-mono font-medium text-slate-700">workspaces</span>
           {containerInfo?.id && (
             <span
               className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500"
