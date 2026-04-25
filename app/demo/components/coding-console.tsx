@@ -24,13 +24,10 @@ import { CHAT_THEMES } from "./chat-theme";
 import { CODING_THEME } from "./coding-theme";
 import { useStreamStats } from "./use-stream-stats";
 import { SkillsResponseSchema, WorkspaceMinimalListSchema } from "@/lib/api-schemas";
-import {
-  expandSlashCommand,
-  InlineComposer,
-  ReasoningPart,
-  SessionList,
-  type SkillSummary,
-} from "./opencode-chat";
+import { expandSlashCommand, type SkillSummary } from "./opencode-chat";
+import { SessionList } from "./chat/session-list";
+import { ReasoningPart } from "./chat/chat-reasoning";
+import { InlineComposer } from "./chat/chat-composer";
 import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
