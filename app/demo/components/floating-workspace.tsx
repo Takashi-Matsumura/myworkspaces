@@ -17,6 +17,7 @@ import {
   type WorkspaceListEntry,
 } from "../api/workspace";
 import { WorkspaceContextProvider, useWorkspace } from "./workspace-context";
+import { ContainerStatusSchema } from "@/lib/api-schemas";
 import { FloatingWorkspaceHeader } from "./floating-workspace-header";
 import { FloatingWorkspaceSelector } from "./floating-workspace-selector";
 import { FloatingWorkspaceTree } from "./floating-workspace-tree";
@@ -109,7 +110,7 @@ function FloatingWorkspaceInner({
   const refetchContainer = useCallback(async () => {
     try {
       const res = await fetch("/api/container", { cache: "no-store" });
-      if (res.ok) setContainerInfo((await res.json()) as ContainerInfo);
+      if (res.ok) setContainerInfo(ContainerStatusSchema.parse(await res.json()));
     } catch {
       // noop: ヘッダバッジが出ないだけなので握り潰す
     }

@@ -22,6 +22,7 @@ import {
 } from "./use-opencode-stream";
 import { CHAT_THEMES, type ChatTheme, type ChatVariant } from "./chat-theme";
 import { useStreamStats } from "./use-stream-stats";
+import { SkillsResponseSchema, WorkspaceMinimalListSchema } from "@/lib/api-schemas";
 
 export type SkillSummary = {
   name: string;
@@ -86,8 +87,7 @@ export default function OpencodeChat({
     try {
       const resp = await fetch("/api/opencode/skills", { cache: "no-store" });
       if (!resp.ok) return;
-      const json = (await resp.json()) as { skills: SkillSummary[] };
-      setSkills(json.skills);
+      setSkills(SkillsResponseSchema.parse(await resp.json()).skills);
     } catch {
       // サジェストが出ないだけなのでチャット自体は壊さない。
     }
@@ -101,10 +101,8 @@ export default function OpencodeChat({
       try {
         const wsResp = await fetch("/api/user/workspaces");
         if (!wsResp.ok) throw new Error(`workspaces ${wsResp.status}`);
-        const wsJson = (await wsResp.json()) as {
-          workspaces?: Array<{ id: string; label: string }>;
-        };
-        const wid = wsJson.workspaces?.[0]?.id;
+        const wsJson = WorkspaceMinimalListSchema.parse(await wsResp.json());
+        const wid = wsJson.workspaces[0]?.id;
         if (wid) {
           const a = await fetch("/api/opencode/activate", {
             method: "POST",

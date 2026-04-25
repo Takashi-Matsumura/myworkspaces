@@ -21,6 +21,7 @@ import { usePointerResize } from "../hooks/use-pointer-resize";
 import { useFontSize } from "../hooks/use-font-size";
 import { use3dFlip } from "../hooks/use-3d-flip";
 import { terminalFontSizeKey } from "../lib/storage-keys";
+import { SettingsResponseSchema } from "@/lib/api-schemas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
 // Business パネルは 表面=opencode チャット / 裏面=BackTabsPanel (RAG/スキル/ヘルプ)。
@@ -179,18 +180,8 @@ export default function FloatingTerminal({
       try {
         const res = await fetch("/api/settings", { cache: "no-store" });
         if (!res.ok) return;
-        const { settings } = (await res.json()) as {
-          settings: {
-            appearance?: {
-              defaultFontSize?: number;
-              defaultPanelWidth?: number;
-              defaultPanelHeight?: number;
-              cursorStyle?: "bar" | "block" | "underline";
-              scrollback?: number;
-            };
-          };
-        };
-        const ap = settings.appearance ?? {};
+        const { settings } = SettingsResponseSchema.parse(await res.json());
+        const ap = settings.appearance;
         if (
           typeof ap.defaultPanelWidth === "number" &&
           typeof ap.defaultPanelHeight === "number"

@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useMount } from "../../hooks/use-mount";
+import {
+  ApiErrorSchema,
+  ContainerStatusSchema,
+  NetworkStatusSchema,
+  SettingsResponseSchema,
+  WorkspaceMinimalListSchema,
+} from "@/lib/api-schemas";
 
 export type Provider = "llama-server" | "anthropic" | "openai";
 export type CursorStyle = "bar" | "block" | "underline";
@@ -70,7 +77,7 @@ export function useSettingsLoader({
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { settings: SettingsShape };
+      const data = SettingsResponseSchema.parse(await res.json());
       setSettings({
         ...data.settings,
         opencode: {
@@ -88,8 +95,7 @@ export function useSettingsLoader({
     try {
       const res = await fetch("/api/container", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as ContainerStatus;
-      setContainerStatus(data);
+      setContainerStatus(ContainerStatusSchema.parse(await res.json()));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -99,8 +105,7 @@ export function useSettingsLoader({
     try {
       const res = await fetch("/api/user/network", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as NetworkStatus;
-      setNetworkStatus(data);
+      setNetworkStatus(NetworkStatusSchema.parse(await res.json()));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -122,8 +127,8 @@ export function useSettingsLoader({
           body: JSON.stringify({ isolated: next }),
         });
         if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `HTTP ${res.status}`);
+          const parsed = ApiErrorSchema.safeParse(await res.json().catch(() => ({})));
+          throw new Error(parsed.success ? (parsed.data.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`);
         }
         await Promise.all([loadNetwork(), loadContainer()]);
       } catch (e) {
@@ -175,8 +180,8 @@ export function useSettingsLoader({
         body: JSON.stringify(settings),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+        const parsed = ApiErrorSchema.safeParse(await res.json().catch(() => ({})));
+        throw new Error(parsed.success ? (parsed.data.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`);
       }
       setDirty(false);
       setSaved(true);
@@ -195,9 +200,7 @@ export function useSettingsLoader({
     try {
       const listRes = await fetch("/api/user/workspaces", { cache: "no-store" });
       if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
-      const { workspaces } = (await listRes.json()) as {
-        workspaces: { id: string; label: string }[];
-      };
+      const { workspaces } = WorkspaceMinimalListSchema.parse(await listRes.json());
       if (!workspaces.length) {
         setRulesSyncResult("対象ワークスペースなし");
         return;
