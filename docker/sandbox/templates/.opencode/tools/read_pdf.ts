@@ -3,7 +3,7 @@
 // セットアップ:
 //   - イメージに python3 + pip + pypdf を install 済み (Dockerfile 参照)
 //   - ワークスペースの .opencode/tools/ に配置
-//   - opencode.json の instructions に pdf-rules.md を追加
+//   - opencode.json の instructions に .opencode/rules/pdf-rules.md を追加
 //
 // 実装メモ:
 //   Node.js 側の PDF パーサ (pdfjs-dist v5 / pdf-parse v2) は reportlab の

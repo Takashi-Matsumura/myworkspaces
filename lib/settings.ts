@@ -96,11 +96,11 @@ export function decodeApiKey(encoded: string): string {
 export function buildOpencodeJson(settings: UserSettings): string {
   const s = settings.opencode;
   const instructions = [
-    "language-rules.md",
-    "vision-rules.md",
-    "business-rules.md",
-    "pdf-rules.md",
-    "coding-rules.md",
+    ".opencode/rules/language-rules.md",
+    ".opencode/rules/vision-rules.md",
+    ".opencode/rules/business-rules.md",
+    ".opencode/rules/pdf-rules.md",
+    ".opencode/rules/coding-rules.md",
   ];
 
   if (s.provider === "llama-server") {

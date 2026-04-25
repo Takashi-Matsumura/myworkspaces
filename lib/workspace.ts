@@ -11,14 +11,18 @@ const MAX_READ_BYTES = 512 * 1024; // 512KB
 const MAX_LIST_ENTRIES = 2000;
 
 // opencode.json の instructions に含めたいテンプレ管理のルールファイル。
+// 全てワークスペース直下の .opencode/rules/ 配下に置くことで、UI 側の
+// 「ドット隠し」と連動して利用者には初期ファイルとして見えなくする。
 // syncTemplateRules / createWorkspaceDirectory の両方がこのリストを参照する。
-const TEMPLATE_RULES = [
+const RULE_FILES = [
   "language-rules.md",
   "vision-rules.md",
   "business-rules.md",
   "pdf-rules.md",
   "coding-rules.md",
 ];
+const RULES_SUBDIR = ".opencode/rules";
+const TEMPLATE_RULES = RULE_FILES.map((f) => `${RULES_SUBDIR}/${f}`);
 
 export type DirEntry = {
   name: string;
@@ -140,15 +144,14 @@ export async function createWorkspaceDirectory(
   const cwdPath = workspaceCwd(id);
   const cwd = shellQuote(cwdPath);
   const script = [
-    `mkdir -p ${cwd}/.opencode/tools`,
+    `mkdir -p ${cwd}/.opencode/tools ${cwd}/.opencode/rules`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/describe_image.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_excel.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_pdf.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/language-rules.md ${cwd}/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/vision-rules.md ${cwd}/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/business-rules.md ${cwd}/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/pdf-rules.md ${cwd}/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/coding-rules.md ${cwd}/ 2>/dev/null || true`,
+    ...RULE_FILES.map(
+      (f) =>
+        `cp -n ${TEMPLATE_DIR}/.opencode/rules/${f} ${cwd}/.opencode/rules/ 2>/dev/null || true`,
+    ),
   ].join(" && ");
 
   const res = await execCollect(sub, ["/bin/bash", "-c", script]);
@@ -185,9 +188,12 @@ const TEMPLATE_AGENT_DEFAULTS: Record<string, { temperature: number; top_p: numb
 };
 
 // 既存ワークスペースにテンプレートの最新設定を再配布する。
-// - テンプレ管理の .md は上書きコピー (ユーザーが直接編集していないことを前提)
-// - opencode.json の instructions 配列に不足しているテンプレルールを追加 (既存要素は保持)
-// - opencode.json の agent.<name> にテンプレデフォルトを追加 (ユーザー設定がある場合は保持)
+// - .opencode/rules/ を mkdir し、テンプレ管理の .md を上書きコピー
+//   (ユーザーが直接編集していないことを前提)
+// - 旧レイアウト (ワークスペース直下の *-rules.md) が残っていれば削除して移行
+// - opencode.json の instructions 配列を新パス (.opencode/rules/<name>) に正規化。
+//   旧名のエントリはリネーム、欠損は追加 (順序は既存値を保持)
+// - opencode.json の agent.<name> にテンプレデフォルトを追加 (ユーザー設定があれば保持)
 // - opencode.json が無い / parse できない場合は merge をスキップ (.md のコピーは行う)
 export async function syncTemplateRules(
   sub: string,
@@ -200,10 +206,12 @@ export async function syncTemplateRules(
   const cwdPath = workspaceCwd(id);
   const cwd = shellQuote(cwdPath);
 
-  // .md を上書きコピー (存在しなくても cp は -f 同等で新規作成する)
-  const script = TEMPLATE_RULES.map(
-    (f) => `cp ${TEMPLATE_DIR}/${f} ${cwd}/ 2>/dev/null || true`,
-  ).join(" && ");
+  // .opencode/rules/ を作って .md を上書きコピー、旧レイアウトのルート直下 .md は削除。
+  const cpLines = RULE_FILES.flatMap((f) => [
+    `cp ${TEMPLATE_DIR}/.opencode/rules/${f} ${cwd}/.opencode/rules/ 2>/dev/null || true`,
+    `rm -f ${cwd}/${f}`,
+  ]);
+  const script = [`mkdir -p ${cwd}/.opencode/rules`, ...cpLines].join(" && ");
   const cpRes = await execCollect(sub, ["/bin/bash", "-c", script]);
   if (cpRes.exitCode !== 0) {
     throw new WorkspaceError(
@@ -224,15 +232,28 @@ export async function syncTemplateRules(
       [k: string]: unknown;
     };
 
-    // instructions 配列に欠損ルールを追加
+    // 旧名 → 新パス (.opencode/rules/<name>) の対応表。旧レイアウトからの自動移行で使う。
+    const renameMap = new Map<string, string>(
+      RULE_FILES.map((f) => [f, `${RULES_SUBDIR}/${f}`]),
+    );
     const current = Array.isArray(json.instructions)
       ? (json.instructions as unknown[]).filter((v): v is string => typeof v === "string")
       : [];
-    const currentSet = new Set(current);
-    const merged = [...current];
+    let renamed = false;
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const v of current) {
+      const next = renameMap.get(v) ?? v;
+      if (next !== v) renamed = true;
+      if (!seen.has(next)) {
+        seen.add(next);
+        normalized.push(next);
+      }
+    }
     for (const rule of TEMPLATE_RULES) {
-      if (!currentSet.has(rule)) {
-        merged.push(rule);
+      if (!seen.has(rule)) {
+        normalized.push(rule);
+        seen.add(rule);
         instructionsAdded.push(rule);
       }
     }
@@ -251,9 +272,9 @@ export async function syncTemplateRules(
       }
     }
 
-    const dirty = instructionsAdded.length > 0 || agentsAdded.length > 0;
+    const dirty = renamed || instructionsAdded.length > 0 || agentsAdded.length > 0;
     if (dirty) {
-      if (instructionsAdded.length > 0) json.instructions = merged;
+      if (renamed || instructionsAdded.length > 0) json.instructions = normalized;
       if (agentsAdded.length > 0) json.agent = mergedAgent;
       const next = JSON.stringify(json, null, 2) + "\n";
       await writeFileInContainer(sub, opencodePath, Buffer.from(next, "utf-8"));

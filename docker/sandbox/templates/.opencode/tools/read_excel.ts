@@ -5,7 +5,7 @@
 //   npm init -y && npm install xlsx
 //
 // このファイルをワークスペースの .opencode/tools/ に配置し、
-// opencode.json の instructions に business-rules.md を追加しておくと、
+// opencode.json の instructions に .opencode/rules/business-rules.md を追加しておくと、
 // AI エージェントが `.xlsx/.xls/.xlsm/.csv` を読むときに自動で使います。
 
 import { tool } from "@opencode-ai/plugin"
