@@ -12,8 +12,17 @@ export type OpencodeSettings = {
   apiKey: string; // base64-encoded (obfuscation only, demo scope)
 };
 
+export type CursorStyle = "bar" | "block" | "underline";
+
 export type AppearanceSettings = {
   defaultFontSize: number;
+  // 新規ターミナルパネル (Code / Biz / Shell) の起動時に使う初期ウィンドウサイズ。
+  // 既に開いているパネルには影響しない (パネル個別の resize 操作が優先)。
+  defaultPanelWidth: number;
+  defaultPanelHeight: number;
+  // xterm のカーソル形状とスクロールバック行数。新規 XtermView マウント時に適用。
+  cursorStyle: CursorStyle;
+  scrollback: number;
 };
 
 export type UserSettings = {
@@ -35,6 +44,10 @@ const DEFAULT_SETTINGS: UserSettings = {
   },
   appearance: {
     defaultFontSize: 13,
+    defaultPanelWidth: 720,
+    defaultPanelHeight: 440,
+    cursorStyle: "bar",
+    scrollback: 10000,
   },
 };
 

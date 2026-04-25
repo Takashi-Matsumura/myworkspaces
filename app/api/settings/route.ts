@@ -17,6 +17,9 @@ function sanitize(p: unknown): UserSettings {
   const providerRaw = oc.provider;
   const provider =
     providerRaw === "anthropic" || providerRaw === "openai" ? providerRaw : "llama-server";
+  const cursorStyleRaw = ap.cursorStyle;
+  const cursorStyle =
+    cursorStyleRaw === "block" || cursorStyleRaw === "underline" ? cursorStyleRaw : "bar";
   return {
     opencode: {
       provider,
@@ -26,6 +29,10 @@ function sanitize(p: unknown): UserSettings {
     },
     appearance: {
       defaultFontSize: Math.max(10, Math.min(28, Number(ap.defaultFontSize) || 13)),
+      defaultPanelWidth: Math.max(360, Math.min(1600, Number(ap.defaultPanelWidth) || 720)),
+      defaultPanelHeight: Math.max(220, Math.min(1200, Number(ap.defaultPanelHeight) || 440)),
+      cursorStyle,
+      scrollback: Math.max(100, Math.min(50000, Number(ap.scrollback) || 10000)),
     },
   };
 }

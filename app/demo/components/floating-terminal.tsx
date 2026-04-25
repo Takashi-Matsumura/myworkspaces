@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -156,6 +157,54 @@ export default function FloatingTerminal({
     const saved = localStorage.getItem(`terminal-fontSize-${variant}`);
     return saved ? Number(saved) : 13;
   });
+  const [cursorStyle, setCursorStyle] = useState<"bar" | "block" | "underline">("bar");
+  const [scrollback, setScrollback] = useState(10000);
+
+  // マウント時に外観設定 (defaultPanelWidth/Height, cursorStyle, scrollback,
+  // defaultFontSize) を取得して反映する。fontSize は localStorage の個別値が
+  // あればそれを優先 (利用者がパネル毎に上書きしている可能性があるため)。
+  // ウィンドウサイズはデフォルトを上書きするので初回マウントの瞬間だけ
+  // 720x440 でちらつくが、許容する。
+  const settingsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (settingsLoadedRef.current) return;
+    settingsLoadedRef.current = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/settings", { cache: "no-store" });
+        if (!res.ok) return;
+        const { settings } = (await res.json()) as {
+          settings: {
+            appearance?: {
+              defaultFontSize?: number;
+              defaultPanelWidth?: number;
+              defaultPanelHeight?: number;
+              cursorStyle?: "bar" | "block" | "underline";
+              scrollback?: number;
+            };
+          };
+        };
+        const ap = settings.appearance ?? {};
+        if (
+          typeof ap.defaultPanelWidth === "number" &&
+          typeof ap.defaultPanelHeight === "number"
+        ) {
+          setSceneSize({ w: ap.defaultPanelWidth, h: ap.defaultPanelHeight });
+        }
+        if (
+          typeof window !== "undefined" &&
+          !localStorage.getItem(`terminal-fontSize-${variant}`) &&
+          typeof ap.defaultFontSize === "number"
+        ) {
+          setFontSize(ap.defaultFontSize);
+        }
+        if (ap.cursorStyle) setCursorStyle(ap.cursorStyle);
+        if (typeof ap.scrollback === "number") setScrollback(ap.scrollback);
+      } catch {
+        // 取得失敗時はフォールバック値で動作するので無視。
+      }
+    })();
+  }, [variant]);
 
   const changeFontSize = (delta: number) => {
     setFontSize((prev) => {
@@ -239,6 +288,8 @@ export default function FloatingTerminal({
               cwd={session.cwd}
               cmd="shell"
               fontSize={fontSize}
+              cursorStyle={cursorStyle}
+              scrollback={scrollback}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
@@ -404,6 +455,8 @@ export default function FloatingTerminal({
                   cwd={session.cwd}
                   cmd={frontCmd}
                   fontSize={fontSize}
+                  cursorStyle={cursorStyle}
+                  scrollback={scrollback}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
