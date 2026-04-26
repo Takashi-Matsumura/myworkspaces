@@ -108,15 +108,18 @@ const BIZ_TEMPLATES: {
     phase: "web",
     template: `指定企業 (または領域) について、Web から多角的に調査し research/<slug>.md にまとめてください。
 
-注意: web_search ツールは Phase B 以降で導入されます。未導入の段階ではこのテンプレは「未対応」と返してください。
+1. 問いを 3-5 個のサブクエリに分解 (例: "事業領域", "プライシング", "直近 12 ヶ月のプレス", "顧客事例", "技術スタック")
+2. 各サブクエリを \`web_search\` (max_results: 5) で検索
+3. 上位 2 件は \`web_search\` の \`read_url\` で本文を取得
+4. \`bash\` で \`mkdir -p research\` 後、\`write\` で research/<slug>.md に追記
+5. 章構成: ## サブクエリ N: ... / 各記述に [^N] 脚注を付ける
+6. ファイル末尾に [^N]: <URL> を集約。引用は **3 件以上必須**
+7. 一次情報 (公式 / プレス / 公的統計) を優先する
 
-導入後の手順:
-1. 問いを 3-5 個のサブクエリに分解
-2. 各サブクエリを web_search (max_results: 5) で検索
-3. 上位 2 件は web_search の read_url で本文を取得
-4. \`mkdir -p research\` 後 research/<slug>.md に append
-5. 章: ## サブクエリ N: ... / 引用 [^N]
-6. 末尾に [^N]: <URL> を集約。引用 3 件以上必須
+DeepSearch 規律 (business-rules.md と一致):
+- 1 ターンに web_search を呼ぶのは最大 5 回
+- そのうち read_url での本文取得は最大 2 件まで
+- 推測で書かない。確認できなかった項目は「未確認」と明記
 
 === 調査対象 (例: 競合 SaaS 3 社の最新事業動向) ===
 

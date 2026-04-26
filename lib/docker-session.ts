@@ -149,11 +149,13 @@ export async function ensureImageBuilt(): Promise<void> {
           "templates/.opencode/tools/describe_image.ts",
           "templates/.opencode/tools/read_excel.ts",
           "templates/.opencode/tools/read_pdf.ts",
+          "templates/.opencode/tools/web_search.ts",
           "templates/.opencode/rules/language-rules.md",
           "templates/.opencode/rules/vision-rules.md",
           "templates/.opencode/rules/business-rules.md",
           "templates/.opencode/rules/pdf-rules.md",
           "templates/.opencode/rules/coding-rules.md",
+          "templates/.opencode/rules/analyze-rules.md",
           "templates/opencode.json",
         ],
       },
@@ -677,6 +679,13 @@ export async function ensureOpencodeSidecar(
   // network 内に閉じているので運用上は問題ない (ホスト公開も 127.0.0.1 bind)。
   const password = process.env.OPENCODE_SERVER_PASSWORD ?? "";
 
+  // Biz パネルの web_search tool が host Next.js (/api/biz/internal/web-search)
+  // を叩くための共有トークン。コンテナには値だけ渡し、API キー本体 (TAVILY_API_KEY 等)
+  // はホスト側の .env に閉じ込める。BIZ_NEXTJS_INTERNAL_URL を上書きしたい場合は
+  // ホスト .env に書いて opencode サイドカー作り直しで反映させる (Phase B)。
+  const bizToolToken = process.env.BIZ_TOOL_TOKEN ?? "";
+  const bizNextjsUrl = process.env.BIZ_NEXTJS_INTERNAL_URL ?? "";
+
   try {
     const created = await docker.createContainer({
       name,
@@ -691,6 +700,8 @@ export async function ensureOpencodeSidecar(
               "OPENCODE_SERVER_USERNAME=opencode",
             ]
           : []),
+        ...(bizToolToken ? [`BIZ_TOOL_TOKEN=${bizToolToken}`] : []),
+        ...(bizNextjsUrl ? [`BIZ_NEXTJS_INTERNAL_URL=${bizNextjsUrl}`] : []),
       ],
       Cmd: [
         "opencode",
