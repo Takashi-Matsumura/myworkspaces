@@ -25,6 +25,24 @@ const RULE_FILES = [
 const RULES_SUBDIR = ".opencode/rules";
 const TEMPLATE_RULES = RULE_FILES.map((f) => `${RULES_SUBDIR}/${f}`);
 
+// opencode の plugin tools。RULE_FILES と同じく createWorkspaceDirectory と
+// syncTemplateRules の両方が参照する。Phase B で web_search.ts が追加された
+// タイミングで「既存ワークスペースに自動配布されない」問題が顕在化したため、
+// tools も rules と同じく sync 対象に含めるようにした。
+//
+// 注意: テンプレ実体はコンテナイメージ内 /opt/myworkspaces/templates/ にある。
+// 新しい tool ファイルを追加した時はホスト側のコピー (templates/) と
+// lib/docker-session.ts の buildImage src 配列の両方を更新し、既存イメージは
+// 強制 rebuild する必要がある (`docker rmi myworkspaces-sandbox:latest` 後に
+// サイドカー再生成)。
+const TOOL_FILES = [
+  "describe_image.ts",
+  "read_excel.ts",
+  "read_pdf.ts",
+  "web_search.ts",
+];
+const TOOLS_SUBDIR = ".opencode/tools";
+
 export type DirEntry = {
   name: string;
   isDir: boolean;
@@ -145,14 +163,14 @@ export async function createWorkspaceDirectory(
   const cwdPath = workspaceCwd(id);
   const cwd = shellQuote(cwdPath);
   const script = [
-    `mkdir -p ${cwd}/.opencode/tools ${cwd}/.opencode/rules`,
-    `cp -n ${TEMPLATE_DIR}/.opencode/tools/describe_image.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_excel.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_pdf.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
-    `cp -n ${TEMPLATE_DIR}/.opencode/tools/web_search.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
+    `mkdir -p ${cwd}/${TOOLS_SUBDIR} ${cwd}/${RULES_SUBDIR}`,
+    ...TOOL_FILES.map(
+      (f) =>
+        `cp -n ${TEMPLATE_DIR}/${TOOLS_SUBDIR}/${f} ${cwd}/${TOOLS_SUBDIR}/ 2>/dev/null || true`,
+    ),
     ...RULE_FILES.map(
       (f) =>
-        `cp -n ${TEMPLATE_DIR}/.opencode/rules/${f} ${cwd}/.opencode/rules/ 2>/dev/null || true`,
+        `cp -n ${TEMPLATE_DIR}/${RULES_SUBDIR}/${f} ${cwd}/${RULES_SUBDIR}/ 2>/dev/null || true`,
     ),
   ].join(" && ");
 
@@ -192,28 +210,45 @@ const TEMPLATE_AGENT_DEFAULTS: Record<string, { temperature: number; top_p: numb
 // 既存ワークスペースにテンプレートの最新設定を再配布する。
 // - .opencode/rules/ を mkdir し、テンプレ管理の .md を上書きコピー
 //   (ユーザーが直接編集していないことを前提)
+// - .opencode/tools/ を mkdir し、テンプレ管理の plugin .ts を上書きコピー
+//   (Phase B 以降に追加された tool が既存ワークスペースに行き渡るように)
 // - 旧レイアウト (ワークスペース直下の *-rules.md) が残っていれば削除して移行
 // - opencode.json の instructions 配列を新パス (.opencode/rules/<name>) に正規化。
 //   旧名のエントリはリネーム、欠損は追加 (順序は既存値を保持)
 // - opencode.json の agent.<name> にテンプレデフォルトを追加 (ユーザー設定があれば保持)
-// - opencode.json が無い / parse できない場合は merge をスキップ (.md のコピーは行う)
+// - opencode.json が無い / parse できない場合は merge をスキップ (.md / .ts のコピーは行う)
+//
+// テンプレ実体 (/opt/myworkspaces/templates/) はコンテナイメージ内に焼き込まれて
+// いるため、新しい tool / rule を追加した時は **イメージの再ビルド** も必要。
+// 既存イメージで新ファイルが無い場合、cp は静かに no-op になる (`|| true`)。
 export async function syncTemplateRules(
   sub: string,
   id: string,
 ): Promise<{
   copiedFiles: string[];
+  copiedTools: string[];
   instructionsAdded: string[];
   agentsAdded: string[];
 }> {
   const cwdPath = workspaceCwd(id);
   const cwd = shellQuote(cwdPath);
 
-  // .opencode/rules/ を作って .md を上書きコピー、旧レイアウトのルート直下 .md は削除。
-  const cpLines = RULE_FILES.flatMap((f) => [
-    `cp ${TEMPLATE_DIR}/.opencode/rules/${f} ${cwd}/.opencode/rules/ 2>/dev/null || true`,
-    `rm -f ${cwd}/${f}`,
-  ]);
-  const script = [`mkdir -p ${cwd}/.opencode/rules`, ...cpLines].join(" && ");
+  // .opencode/rules/ と .opencode/tools/ を mkdir し、テンプレを上書きコピー。
+  // 旧レイアウトのルート直下 *.md は削除して新レイアウトに揃える。
+  const cpLines = [
+    ...RULE_FILES.flatMap((f) => [
+      `cp ${TEMPLATE_DIR}/${RULES_SUBDIR}/${f} ${cwd}/${RULES_SUBDIR}/ 2>/dev/null || true`,
+      `rm -f ${cwd}/${f}`,
+    ]),
+    ...TOOL_FILES.map(
+      (f) =>
+        `cp ${TEMPLATE_DIR}/${TOOLS_SUBDIR}/${f} ${cwd}/${TOOLS_SUBDIR}/ 2>/dev/null || true`,
+    ),
+  ];
+  const script = [
+    `mkdir -p ${cwd}/${RULES_SUBDIR} ${cwd}/${TOOLS_SUBDIR}`,
+    ...cpLines,
+  ].join(" && ");
   const cpRes = await execCollect(sub, ["/bin/bash", "-c", script]);
   if (cpRes.exitCode !== 0) {
     throw new WorkspaceError(
@@ -287,6 +322,7 @@ export async function syncTemplateRules(
 
   return {
     copiedFiles: [...TEMPLATE_RULES],
+    copiedTools: TOOL_FILES.map((f) => `${TOOLS_SUBDIR}/${f}`),
     instructionsAdded,
     agentsAdded,
   };
