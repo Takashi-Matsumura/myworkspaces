@@ -110,10 +110,18 @@ export function ProgressPane({
           className={busy ? `${CODING_THEME.cardAccentRun} animate-pulse` : "text-white/40"}
           style={{ width: "0.95em", height: "0.95em" }}
         />
-        <span className="text-white/60">{verb}:</span>
-        <span className="truncate font-mono text-white/90">
-          {parsed.tool} {target}
-        </span>
+        {busy ? (
+          <span className="opencode-shimmer truncate font-mono">
+            {verb}: {parsed.tool} {target}
+          </span>
+        ) : (
+          <>
+            <span className="text-white/60">{verb}:</span>
+            <span className="truncate font-mono text-white/90">
+              {parsed.tool} {target}
+            </span>
+          </>
+        )}
       </span>
     );
   }
@@ -132,8 +140,10 @@ export function ProgressPane({
         )}
         <span className="text-white/50">
           {stepFinish}/{stepStart || stepFinish} 完了
-          {runningStep > 0 ? ` · ${runningStep} 進行中` : ""}
         </span>
+        {runningStep > 0 && (
+          <span className="opencode-shimmer">· {runningStep} 進行中</span>
+        )}
       </span>
       <span className="h-3 w-px bg-white/10" />
       {toolLabel ?? (
