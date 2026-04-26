@@ -13,6 +13,7 @@ import type { SkillSummary } from "../opencode-chat";
 import { ReasoningPart } from "./chat-reasoning";
 import { InlineComposer, type InlineComposerHandle } from "./chat-composer";
 import { useChatScrollAndFocus } from "./use-chat-scroll-focus";
+import { GeneratingIndicator } from "./generating-indicator";
 
 export function ChatThread({
   sessionId,
@@ -131,11 +132,7 @@ export function ChatThread({
           })}
         </div>
       ))}
-      {busy && (
-        <div className={theme.assistantAccent} style={{ fontSize: "0.9em" }}>
-          ● 応答を生成中...
-        </div>
-      )}
+      {busy && <GeneratingIndicator />}
       <InlineComposer
         ref={composerRef}
         disabled={sending}

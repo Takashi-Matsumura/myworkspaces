@@ -54,3 +54,50 @@ body {
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
 }
+
+/* opencode TUI 風の「光が左右に走る」シマー。生成中インジケータに使う。
+   背景グラデーションを文字でクリップして、その位置を 2.4s で左右に動かす。
+   shimmer-base/shimmer-peak を CSS 変数で渡しているので、明地 (Business) と
+   暗地 (Coding/Analyze=chat-dark) で適切なコントラストに切替えられる。 */
+.opencode-shimmer {
+  --shimmer-base: rgba(0, 0, 0, 0.35);
+  --shimmer-peak: rgba(0, 0, 0, 0.95);
+  background-image: linear-gradient(
+    90deg,
+    var(--shimmer-base) 0%,
+    var(--shimmer-base) 30%,
+    var(--shimmer-peak) 50%,
+    var(--shimmer-base) 70%,
+    var(--shimmer-base) 100%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: opencode-shimmer-sweep 2.4s linear infinite;
+}
+
+.chat-dark .opencode-shimmer {
+  --shimmer-base: rgba(255, 255, 255, 0.28);
+  --shimmer-peak: rgba(255, 255, 255, 1);
+}
+
+@keyframes opencode-shimmer-sweep {
+  0% {
+    background-position: 220% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opencode-shimmer {
+    animation: none;
+    color: var(--shimmer-peak);
+    -webkit-text-fill-color: var(--shimmer-peak);
+    background-image: none;
+  }
+}
