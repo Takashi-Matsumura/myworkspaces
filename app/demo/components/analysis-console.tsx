@@ -30,6 +30,7 @@ import { SessionList } from "./chat/session-list";
 import { ReasoningPart } from "./chat/chat-reasoning";
 import { InlineComposer, type InlineComposerHandle } from "./chat/chat-composer";
 import { useChatScrollAndFocus } from "./chat/use-chat-scroll-focus";
+import { GeneratingIndicator } from "./chat/generating-indicator";
 import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
@@ -526,11 +527,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
               </div>
             ))
           )}
-          {busy && (
-            <div className={theme.assistantAccent} style={{ fontSize: "0.9em" }}>
-              ● 応答を生成中...
-            </div>
-          )}
+          {busy && <GeneratingIndicator />}
         </div>
       </main>
 
