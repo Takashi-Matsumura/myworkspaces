@@ -334,8 +334,10 @@ function applySseMessage(raw: string, dispatch: (a: Action) => void): void {
 
 // session の履歴 JSON から messages と parts を抽出する。
 // opencode の /session/{id}/message レスポンスは
-//   [ { info: {id,role,sessionID,...}, parts: [ {id,type,text,...}, ... ] }, ... ]
-// の形で返ってくる。
+//   [ { info: {id,role,sessionID,...}, parts: [ {id,type,text,...,tool?,state?,input?,output?}, ... ] }, ... ]
+// の形で返ってくる。SSE 経路 (applySseMessage) と同じく、id/messageID/sessionID/type/text
+// 以外は raw に退避して parseToolPart に渡す。これを忘れると tool カードが
+// セッション再オープン時に「unknown」として表示される。
 function flattenHistory(raw: unknown): {
   messages: MessageInfo[];
   parts: Record<string, PartInfo>;
@@ -354,16 +356,33 @@ function flattenHistory(raw: unknown): {
     if (Array.isArray(partsArr)) {
       for (const p of partsArr) {
         if (!p || typeof p !== "object") continue;
-        const pp = p as Partial<PartInfo>;
-        if (!pp.id) continue;
-        parts[pp.id] = {
-          id: pp.id,
-          messageID: pp.messageID ?? info.id,
-          sessionID: pp.sessionID ?? info.sessionID,
-          type: pp.type ?? "text",
-          text: pp.text ?? "",
+        const pp = p as Record<string, unknown>;
+        const id = pp.id;
+        if (typeof id !== "string" || id.length === 0) continue;
+        const {
+          id: _id,
+          messageID: _messageID,
+          sessionID: _sessionID,
+          type: _type,
+          text: _text,
+          ...rest
+        } = pp;
+        void _id;
+        void _messageID;
+        void _sessionID;
+        void _type;
+        void _text;
+        parts[id] = {
+          id,
+          messageID:
+            typeof pp.messageID === "string" ? pp.messageID : info.id,
+          sessionID:
+            typeof pp.sessionID === "string" ? pp.sessionID : info.sessionID,
+          type: typeof pp.type === "string" ? pp.type : "text",
+          text: typeof pp.text === "string" ? pp.text : "",
+          raw: Object.keys(rest).length > 0 ? rest : undefined,
         };
-        partIds.push(pp.id);
+        partIds.push(id);
       }
     }
     messages.push({

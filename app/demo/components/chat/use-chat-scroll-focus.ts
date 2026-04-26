@@ -7,8 +7,10 @@ import type { InlineComposerHandle } from "./chat-composer";
 //
 // 1. セッション切替時 + そのセッションの履歴が初めて表示された時 → 強制的に最下部へ
 //    (ロード前は totalChars=0 なので、最初に内容が入った瞬間にスナップする)
-// 2. 以後は「下端近くを見ている時のみ」追従。上を読んでいる間は引き戻さない
-// 3. busy が true → false になった瞬間 (= 応答生成完了) → 強制最下部 + composer フォーカス
+// 2. 生成中 (busy=true) は強制で最下部に追従。思考ログや tool カードで scrollHeight が
+//    一気に伸びても、最新の処理過程が常に画面に出ているようにする
+// 3. 非生成中は「下端近くを見ている時のみ」追従。上を読んでいる間は引き戻さない
+// 4. busy が true → false になった瞬間 (= 応答生成完了) → 強制最下部 + composer フォーカス
 export function useChatScrollAndFocus({
   scrollRef,
   composerRef,
@@ -41,6 +43,10 @@ export function useChatScrollAndFocus({
     ) {
       el.scrollTop = el.scrollHeight;
       initialSnappedFor.current = sessionId;
+      return;
+    }
+    if (busy) {
+      el.scrollTop = el.scrollHeight;
       return;
     }
     const nearBottom =

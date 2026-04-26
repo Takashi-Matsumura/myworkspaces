@@ -29,7 +29,9 @@ export type ParsedTool = {
   tool: string; // "read" | "edit" | "write" | "bash" | "grep" | ... | "unknown"
   input?: Record<string, unknown>;
   output?: string;
-  state?: string; // "pending" | "running" | "completed" | "failed"
+  state?: string; // "pending" | "running" | "completed" | "error"
+  error?: string;
+  exitCode?: number;
   rawText?: string; // fallback 表示用
 };
 
@@ -58,10 +60,39 @@ export function parseToolPart(part: PartInfo): ParsedTool {
   const toolName =
     firstString(raw.tool, raw.name, raw.toolName)?.toLowerCase() ?? "unknown";
 
-  // input / output の候補
-  const input = firstObject(raw.input, raw.args, raw.parameters);
-  const output = firstString(raw.output, raw.result, part.text);
-  const state = firstString(raw.state, raw.status);
+  // opencode 1.14.x の tool part は input/output/status をすべて state 配下に
+  // 入れる。古いスキーマや別ツールでも壊れないよう、トップレベルも見る。
+  const stateObj = firstObject(raw.state);
+  const stateMeta = stateObj
+    ? firstObject((stateObj as Record<string, unknown>).metadata)
+    : undefined;
+  const stateInput = stateObj
+    ? firstObject((stateObj as Record<string, unknown>).input)
+    : undefined;
+  const stateOutput = stateObj
+    ? firstString(
+        (stateObj as Record<string, unknown>).output,
+        stateMeta ? (stateMeta as Record<string, unknown>).output : undefined,
+      )
+    : undefined;
+  const stateStatus = stateObj
+    ? firstString((stateObj as Record<string, unknown>).status)
+    : undefined;
+  const stateError = stateObj
+    ? firstString((stateObj as Record<string, unknown>).error)
+    : undefined;
+  const stateExitRaw = stateMeta
+    ? (stateMeta as Record<string, unknown>).exit
+    : undefined;
+  const exitCode =
+    typeof stateExitRaw === "number" ? stateExitRaw : undefined;
+
+  const input =
+    firstObject(raw.input, raw.args, raw.parameters) ?? stateInput;
+  const output =
+    firstString(raw.output, raw.result) ?? stateOutput ?? (part.text || undefined);
+  const state =
+    firstString(raw.status) ?? stateStatus ?? (typeof raw.state === "string" ? raw.state : undefined);
 
   // text が JSON 形式で完結している場合のフォールバック解析
   if (toolName === "unknown" && part.text.trim().startsWith("{")) {
@@ -82,7 +113,15 @@ export function parseToolPart(part: PartInfo): ParsedTool {
     }
   }
 
-  return { tool: toolName, input, output, state, rawText: part.text };
+  return {
+    tool: toolName,
+    input,
+    output,
+    state,
+    error: stateError,
+    exitCode,
+    rawText: part.text,
+  };
 }
 
 function Card({
@@ -160,6 +199,7 @@ function ReadFileCard({ parsed }: { parsed: ParsedTool }) {
   const path = pathOf(parsed.input);
   const lang = path ? inferLanguageFromPath(path) : "text";
   const lines = lineCount(parsed.output);
+  const isError = parsed.state === "error";
   return (
     <Card
       icon={<FileText className="h-3.5 w-3.5" />}
@@ -168,11 +208,20 @@ function ReadFileCard({ parsed }: { parsed: ParsedTool }) {
         <span className="flex items-center gap-2">
           <span className="font-mono text-[0.9em]">Read</span>
           <span className="truncate font-mono opacity-80">{path ?? "(path 不明)"}</span>
-          {lines > 0 && <span className="opacity-60">· {lines} 行</span>}
+          {isError ? (
+            <span className="text-red-400">× {parsed.state}</span>
+          ) : (
+            lines > 0 && <span className="opacity-60">· {lines} 行</span>
+          )}
         </span>
       }
     >
-      {parsed.output ? (
+      {parsed.error && (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-red-300">
+          {parsed.error}
+        </pre>
+      )}
+      {!isError && parsed.output ? (
         <CodeBlock language={lang} code={parsed.output} />
       ) : null}
     </Card>
@@ -228,11 +277,9 @@ function WriteFileCard({ parsed }: { parsed: ParsedTool }) {
 
 function BashCard({ parsed }: { parsed: ParsedTool }) {
   const cmd = cmdOf(parsed.input) ?? "";
-  const exit = firstString(
-    parsed.input?.exitCode as unknown,
-    (parsed as unknown as { exitCode?: string }).exitCode,
-  );
-  const ok = parsed.state === "completed" || (exit ?? "0") === "0";
+  const ok =
+    parsed.state === "completed" &&
+    (parsed.exitCode === undefined || parsed.exitCode === 0);
   return (
     <Card
       icon={<Terminal className="h-3.5 w-3.5" />}
@@ -244,10 +291,11 @@ function BashCard({ parsed }: { parsed: ParsedTool }) {
             {cmd.length > 60 ? cmd.slice(0, 60) + "…" : cmd}
           </span>
           {parsed.state && (
-            <span
-              className={ok ? "text-emerald-400" : "text-red-400"}
-            >
+            <span className={ok ? "text-emerald-400" : "text-red-400"}>
               {ok ? "✓" : "×"} {parsed.state}
+              {parsed.exitCode !== undefined && parsed.exitCode !== 0 && (
+                <> · exit {parsed.exitCode}</>
+              )}
             </span>
           )}
         </span>
@@ -255,10 +303,13 @@ function BashCard({ parsed }: { parsed: ParsedTool }) {
     >
       {cmd && <CodeBlock language="bash" code={cmd} />}
       {parsed.output && (
-        <pre
-          className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-white/70"
-        >
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-white/70">
           {parsed.output}
+        </pre>
+      )}
+      {parsed.error && (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-red-300">
+          {parsed.error}
         </pre>
       )}
     </Card>
