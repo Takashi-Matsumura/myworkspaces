@@ -41,7 +41,7 @@ const BIZ_PREFIXES: Record<"data" | "doc" | "web" | "synth", string> = {
   doc:
     "[business-rules.md に従って Doc フェーズで動作すること。@inputs/ 配下の PDF を read_pdf、画像を describe_image で読み、reports/doc-<topic>.md に要約と引用 (page) を書く。実装ファイルは write/edit で書き換えない]\n\n",
   web:
-    "[business-rules.md に従って Web フェーズで動作すること。web_search ツール (Phase B 以降) で多段検索し research/<slug>.md に引用 URL を蓄積する (1 ターン最大 5 クエリ、本文取得は 2 件まで、引用 3 件以上必須)。実装ファイルは write/edit で書き換えない]\n\n",
+    "[business-rules.md に従って Web フェーズで動作すること。web_search ツールで多段検索し research/<slug>.md に引用 URL を蓄積する (1 ターン最大 5 クエリ、本文取得は 2 件まで、引用 3 件以上必須)。実装ファイルは write/edit で書き換えない]\n\n",
   synth:
     "[business-rules.md に従って Synthesize フェーズで動作すること。reports/ と research/ 配下を read で読み、reports/<topic>-summary.md に Data/Doc/Web 三面ビューと統合インサイト・矛盾点を書く。実装ファイルは write/edit で書き換えない]\n\n",
 };
