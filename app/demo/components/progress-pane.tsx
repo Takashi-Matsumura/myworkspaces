@@ -85,7 +85,7 @@ export function ProgressPane({
     checks.push(
       <Circle
         key={`running-${i}`}
-        className={CODING_THEME.cardAccentRun}
+        className={`${CODING_THEME.cardAccentRun} animate-pulse`}
         style={{ width: "0.95em", height: "0.95em" }}
       />,
     );
@@ -107,7 +107,7 @@ export function ProgressPane({
     toolLabel = (
       <span className="flex min-w-0 items-center gap-1.5 truncate">
         <Zap
-          className={busy ? CODING_THEME.cardAccentRun : "text-white/40"}
+          className={busy ? `${CODING_THEME.cardAccentRun} animate-pulse` : "text-white/40"}
           style={{ width: "0.95em", height: "0.95em" }}
         />
         {busy ? (
