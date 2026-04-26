@@ -3,6 +3,8 @@ import { getUser } from "@/lib/user";
 import { findWorkspaceById, touchWorkspace } from "@/lib/user-store";
 import { getUserNetworkIsolation } from "@/lib/user-network";
 import { activateOpencodeSidecar } from "@/lib/docker-session";
+import { seedSkillsIfMissing } from "@/lib/opencode-skills";
+import { SEED_SKILLS } from "@/lib/biz/skills-seed";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +45,16 @@ export async function POST(req: NextRequest) {
   const isolated = await getUserNetworkIsolation(user.id);
   const container = await activateOpencodeSidecar(user.id, isolated, workspaceId);
   const info = await container.inspect();
+
+  // Biz パネル向けデフォルトスキルを seed (冪等)。activate を待たせたくないので
+  // fire-and-forget。失敗しても activate 自体は成功扱い。
+  void seedSkillsIfMissing(user.id, SEED_SKILLS).then((written) => {
+    if (written.length > 0) {
+      console.log(
+        `[skills] seeded ${written.length} default skill(s) for ${user.id}: ${written.join(", ")}`,
+      );
+    }
+  });
 
   return NextResponse.json({
     ok: true,

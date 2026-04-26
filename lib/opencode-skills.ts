@@ -135,6 +135,48 @@ export async function writeSkill(
   await writeFileInContainer(sub, `${dir}/SKILL.md`, Buffer.from(md, "utf-8"));
 }
 
+// SKILL.md がまだ無いスキルだけを書き込む。ユーザーが UI で編集したスキルは
+// 上書きしない (description / body のいずれかを変えていても保護)。
+// activate 時に呼ばれる想定なので、エラーは個別に warn して握り潰す。
+//
+// 戻り値: 実際に書き込んだスキル名の配列。
+export async function seedSkillsIfMissing(
+  sub: string,
+  seeds: ReadonlyArray<{ name: string; description: string; body: string }>,
+): Promise<string[]> {
+  const written: string[] = [];
+  for (const s of seeds) {
+    try {
+      validateName(s.name);
+    } catch {
+      continue; // seed 側のバグは alarm せず黙ってスキップ
+    }
+    let exists = false;
+    try {
+      const path = `${SKILLS_ROOT}/${s.name}/SKILL.md`;
+      const r = await execCollect(sub, ["/usr/bin/test", "-f", path]);
+      exists = r.exitCode === 0;
+    } catch (err) {
+      console.warn(
+        `[skills] seed check failed for ${s.name} (sub=${sub}):`,
+        err,
+      );
+      continue;
+    }
+    if (exists) continue;
+    try {
+      await writeSkill(sub, s.name, s.description, s.body);
+      written.push(s.name);
+    } catch (err) {
+      console.warn(
+        `[skills] seed write failed for ${s.name} (sub=${sub}):`,
+        err,
+      );
+    }
+  }
+  return written;
+}
+
 export async function deleteSkill(sub: string, name: string): Promise<void> {
   validateName(name);
   const dir = `${SKILLS_ROOT}/${name}`;
