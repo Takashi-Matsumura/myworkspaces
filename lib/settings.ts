@@ -114,6 +114,7 @@ export function buildOpencodeJson(settings: UserSettings): string {
     ".opencode/rules/business-rules.md",
     ".opencode/rules/pdf-rules.md",
     ".opencode/rules/coding-rules.md",
+    ".opencode/rules/analyze-rules.md",
   ];
 
   if (s.provider === "llama-server") {

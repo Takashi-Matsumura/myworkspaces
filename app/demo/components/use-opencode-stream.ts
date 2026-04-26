@@ -459,8 +459,11 @@ export function useOpencodeStream() {
       sessionId: string,
       text: string,
       opts?: {
-        variant?: "coding" | "business";
+        variant?: "coding" | "business" | "analyze";
         agent?: "plan" | "build";
+        // Analyze パネルの分析フェーズ。route.ts 側で対応 prefix に変換され、
+        // opencode には転送されない (UI 専用概念)
+        mode?: "survey" | "detail" | "port";
       },
     ): Promise<boolean> => {
       const body: Record<string, unknown> = {
@@ -468,6 +471,7 @@ export function useOpencodeStream() {
       };
       if (opts?.variant) body.variant = opts.variant;
       if (opts?.agent) body.agent = opts.agent;
+      if (opts?.mode) body.mode = opts.mode;
       const resp = await fetch(
         `/api/opencode/sessions/${encodeURIComponent(sessionId)}/prompt`,
         {
