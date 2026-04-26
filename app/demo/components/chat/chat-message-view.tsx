@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -11,7 +11,8 @@ import type { ChatTheme } from "../chat-theme";
 import { useStreamStats } from "../use-stream-stats";
 import type { SkillSummary } from "../opencode-chat";
 import { ReasoningPart } from "./chat-reasoning";
-import { InlineComposer } from "./chat-composer";
+import { InlineComposer, type InlineComposerHandle } from "./chat-composer";
+import { useChatScrollAndFocus } from "./use-chat-scroll-focus";
 
 export function ChatThread({
   sessionId,
@@ -39,6 +40,7 @@ export function ChatThread({
   theme: ChatTheme;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<InlineComposerHandle>(null);
   const totalChars = useMemo(
     () =>
       messages.reduce(
@@ -49,21 +51,16 @@ export function ChatThread({
     [messages, parts],
   );
 
-  // セッション切替時は問答無用で下端に。
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [sessionId]);
-
-  // 以後、既に下端近くを見ている時だけ自動追従する。上にスクロールして
-  // 過去ログを読んでいる間は、新着 delta や composer の伸縮で引き戻さない。
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const nearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [totalChars, busy, input]);
+  // 共通フックでスクロール (履歴ロード後の最下部スナップ / 下端追従) と
+  // 生成完了時のフォーカスを処理する。
+  useChatScrollAndFocus({
+    scrollRef,
+    composerRef,
+    sessionId,
+    totalChars,
+    busy,
+    input,
+  });
 
   // ストリーミング指標 (busy 計測 / llama-server /tokenize / コンテキスト率)
   // は use-stream-stats hook に切り出し済み。挙動は従来と等価。
@@ -140,6 +137,7 @@ export function ChatThread({
         </div>
       )}
       <InlineComposer
+        ref={composerRef}
         disabled={sending}
         busy={busy}
         value={input}

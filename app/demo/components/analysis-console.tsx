@@ -28,7 +28,8 @@ import { SkillsResponseSchema, WorkspaceMinimalListSchema } from "@/lib/api-sche
 import { expandSlashCommand, type SkillSummary } from "./opencode-chat";
 import { SessionList } from "./chat/session-list";
 import { ReasoningPart } from "./chat/chat-reasoning";
-import { InlineComposer } from "./chat/chat-composer";
+import { InlineComposer, type InlineComposerHandle } from "./chat/chat-composer";
+import { useChatScrollAndFocus } from "./chat/use-chat-scroll-focus";
 import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
@@ -334,6 +335,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
   }, [messages]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<InlineComposerHandle>(null);
   const totalChars = useMemo(
     () =>
       messages.reduce(
@@ -347,16 +349,14 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
       ),
     [messages, state.parts],
   );
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [activeId]);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [totalChars, busy, input]);
+  useChatScrollAndFocus({
+    scrollRef,
+    composerRef,
+    sessionId: activeId,
+    totalChars,
+    busy,
+    input,
+  });
 
   return (
     <div
@@ -595,6 +595,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
           })}
         </div>
         <InlineComposer
+          ref={composerRef}
           disabled={sending || !activeId}
           busy={busy}
           value={input}
