@@ -24,10 +24,11 @@ import { terminalFontSizeKey } from "../lib/storage-keys";
 import { SettingsResponseSchema } from "@/lib/api-schemas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
-// Business パネルは 表面=opencode チャット / 裏面=BackTabsPanel (RAG/スキル/ヘルプ)。
-// Coding/Analyze は React チャット表面 + Bash/ヘルプ/スキル 裏面。
+// Business / Coding / Analyze は React チャット表面 + Bash/ヘルプ/スキル 裏面。
 // Ubuntu は従来どおり XtermView ベース。
-const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
+const BusinessConsole = dynamic(() => import("./business-console"), {
+  ssr: false,
+});
 const CodingConsole = dynamic(() => import("./coding-console"), {
   ssr: false,
 });
@@ -425,7 +426,7 @@ export default function FloatingTerminal({
                 ) : variant === "analyze" ? (
                   <AnalysisConsole fontSize={fontSize} />
                 ) : (
-                  <OpencodeChat fontSize={fontSize} variant="business" />
+                  <BusinessConsole fontSize={fontSize} />
                 )
               ) : session ? (
                 <XtermView
