@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Send, Square } from "lucide-react";
 import type { ChatTheme } from "../chat-theme";
 import type { SkillSummary } from "../opencode-chat";
 
-// メッセージ履歴のスクロール領域内に「次の下書きメッセージ」として並ぶ
-// インライン入力カード。下部固定のチャット欄ではなく会話フローの末尾に
-// 居座る形で、複数行入力にも内容量に応じて自動で伸びる。
-export function InlineComposer({
-  disabled,
-  busy,
-  value,
-  onChange,
-  onSubmit,
-  onAbort,
-  skills,
-  statusLine,
-  theme,
-}: {
+// 親が「生成完了時にフォーカスを戻す」等の操作で textarea を直接触れるよう公開する。
+export type InlineComposerHandle = {
+  focus: () => void;
+};
+
+type InlineComposerProps = {
   disabled: boolean;
   busy: boolean;
   value: string;
@@ -28,9 +28,37 @@ export function InlineComposer({
   skills: SkillSummary[];
   statusLine: string;
   theme: ChatTheme;
-}) {
+};
+
+// メッセージ履歴のスクロール領域内に「次の下書きメッセージ」として並ぶ
+// インライン入力カード。下部固定のチャット欄ではなく会話フローの末尾に
+// 居座る形で、複数行入力にも内容量に応じて自動で伸びる。
+export const InlineComposer = forwardRef<InlineComposerHandle, InlineComposerProps>(function InlineComposer(
+  {
+    disabled,
+    busy,
+    value,
+    onChange,
+    onSubmit,
+    onAbort,
+    skills,
+    statusLine,
+    theme,
+  },
+  ref,
+) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [suggestIndex, setSuggestIndex] = useState(0);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => {
+        textareaRef.current?.focus();
+      },
+    }),
+    [],
+  );
 
   // 入力の先頭が `/<prefix>` の形ならサジェストを出す。空の `/` は全件表示。
   const suggestions = useMemo(() => {
@@ -43,7 +71,6 @@ export function InlineComposer({
   const showSuggest = !disabled && suggestions.length > 0;
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (suggestIndex >= suggestions.length) setSuggestIndex(0);
   }, [suggestions.length, suggestIndex]);
 
@@ -199,4 +226,4 @@ export function InlineComposer({
       </div>
     </form>
   );
-}
+});
