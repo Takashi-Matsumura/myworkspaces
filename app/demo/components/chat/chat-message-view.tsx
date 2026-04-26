@@ -102,49 +102,56 @@ export function ChatThread({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-3"
-    >
-      {groups.map((g) => (
-        <div
-          key={g.key}
-          className={`rounded-lg px-3 py-2 ${
-            g.role === "user" ? theme.userBubble : theme.assistantBubble
-          }`}
-        >
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div
+        ref={scrollRef}
+        className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-3"
+      >
+        {groups.map((g) => (
           <div
-            className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
-            style={{ fontSize: "0.7em" }}
+            key={g.key}
+            className={`rounded-lg px-3 py-2 ${
+              g.role === "user" ? theme.userBubble : theme.assistantBubble
+            }`}
           >
-            {g.role === "user" ? "あなた" : "opencode"}
+            <div
+              className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
+              style={{ fontSize: "0.7em" }}
+            >
+              {g.role === "user" ? "あなた" : "opencode"}
+            </div>
+            {g.partIds.map(({ pid, messageId }) => {
+              const p = parts[pid];
+              if (!p) return null;
+              return (
+                <MessagePart
+                  key={`${messageId}:${pid}`}
+                  part={p}
+                  theme={theme}
+                />
+              );
+            })}
           </div>
-          {g.partIds.map(({ pid, messageId }) => {
-            const p = parts[pid];
-            if (!p) return null;
-            return (
-              <MessagePart
-                key={`${messageId}:${pid}`}
-                part={p}
-                theme={theme}
-              />
-            );
-          })}
-        </div>
-      ))}
-      {busy && <GeneratingIndicator />}
-      <InlineComposer
-        ref={composerRef}
-        disabled={sending}
-        busy={busy}
-        value={input}
-        onChange={onChange}
-        onSubmit={onSubmit}
-        onAbort={onAbort}
-        skills={skills}
-        statusLine={statusLine}
-        theme={theme}
-      />
+        ))}
+        {busy && <GeneratingIndicator />}
+      </div>
+      {/* 下部固定コンポーザ (Analyze と同じ構造) */}
+      <div
+        className={`flex-none border-t ${theme.headerBorder} ${theme.headerBg} px-4 py-3`}
+      >
+        <InlineComposer
+          ref={composerRef}
+          disabled={sending}
+          busy={busy}
+          value={input}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          onAbort={onAbort}
+          skills={skills}
+          statusLine={statusLine}
+          theme={theme}
+        />
+      </div>
     </div>
   );
 }
