@@ -149,6 +149,7 @@ export async function createWorkspaceDirectory(
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/describe_image.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_excel.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     `cp -n ${TEMPLATE_DIR}/.opencode/tools/read_pdf.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
+    `cp -n ${TEMPLATE_DIR}/.opencode/tools/web_search.ts ${cwd}/.opencode/tools/ 2>/dev/null || true`,
     ...RULE_FILES.map(
       (f) =>
         `cp -n ${TEMPLATE_DIR}/.opencode/rules/${f} ${cwd}/.opencode/rules/ 2>/dev/null || true`,

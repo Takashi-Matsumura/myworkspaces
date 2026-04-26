@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSearchProvider } from "@/lib/biz/search-provider";
+import { getFallbackReader, getSearchProvider } from "@/lib/biz/search-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,19 +53,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 本文取得モード
+  // 本文取得モード。検索プロバイダが read を持たない (Brave/Serper) 場合、
+  // BIZ_READER_PROVIDER (default "jina") のフォールバック reader にバトンを渡す。
   if (typeof body.read_url === "string" && body.read_url.length > 0) {
-    if (!provider.read) {
+    const reader = provider.read ? provider : getFallbackReader();
+    if (!reader || !reader.read) {
       return NextResponse.json(
         {
-          error: `provider "${provider.name}" does not support read_url`,
+          error: `read_url is not supported: provider "${provider.name}" has no read() and no fallback reader configured (BIZ_READER_PROVIDER=jina + JINA_API_KEY)`,
         },
         { status: 400 },
       );
     }
     try {
-      const result = await provider.read(body.read_url);
-      return NextResponse.json({ provider: provider.name, ...result });
+      const result = await reader.read(body.read_url);
+      return NextResponse.json({
+        provider: provider.name,
+        reader: reader.name,
+        ...result,
+      });
     } catch (err) {
       return NextResponse.json(
         { error: (err as Error).message },
