@@ -28,6 +28,10 @@ type InlineComposerProps = {
   skills: SkillSummary[];
   statusLine: string;
   theme: ChatTheme;
+  // ファイルが composer 領域に DnD された時に呼ばれる。Biz パネルが
+  // 受け取って /api/workspace/upload に転送する想定。Coding/Analyze は
+  // 渡さない (= DnD は無視する)。
+  onFilesDropped?: (files: File[]) => void | Promise<void>;
 };
 
 // メッセージ履歴のスクロール領域内に「次の下書きメッセージ」として並ぶ
@@ -44,11 +48,13 @@ export const InlineComposer = forwardRef<InlineComposerHandle, InlineComposerPro
     skills,
     statusLine,
     theme,
+    onFilesDropped,
   },
   ref,
 ) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [suggestIndex, setSuggestIndex] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
 
   useImperativeHandle(
     ref,
@@ -97,13 +103,47 @@ export const InlineComposer = forwardRef<InlineComposerHandle, InlineComposerPro
     [onChange],
   );
 
+  const dropEnabled = Boolean(onFilesDropped) && !disabled;
+
   return (
     <form
-      className={`relative rounded-lg shadow-sm ${theme.composerWrap}`}
+      className={`relative rounded-lg shadow-sm ${theme.composerWrap} ${
+        dragActive ? theme.composerDropActive : ""
+      }`}
       onSubmit={(e) => {
         e.preventDefault();
         if (!disabled) void onSubmit();
       }}
+      onDragOver={
+        dropEnabled
+          ? (e) => {
+              if (e.dataTransfer.types.includes("Files")) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+                if (!dragActive) setDragActive(true);
+              }
+            }
+          : undefined
+      }
+      onDragLeave={
+        dropEnabled
+          ? (e) => {
+              // composer の外まで完全に出た時だけクリア (子要素間の dragleave を無視)
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setDragActive(false);
+            }
+          : undefined
+      }
+      onDrop={
+        dropEnabled
+          ? (e) => {
+              e.preventDefault();
+              setDragActive(false);
+              const files = Array.from(e.dataTransfer.files);
+              if (files.length > 0) void onFilesDropped?.(files);
+            }
+          : undefined
+      }
     >
       {showSuggest && (
         <div

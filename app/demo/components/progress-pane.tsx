@@ -3,32 +3,31 @@
 import { useMemo } from "react";
 import { CheckCircle2, Circle, Zap } from "lucide-react";
 import type { MessageInfo, PartInfo } from "./use-opencode-stream";
-import { CODING_THEME } from "./coding-theme";
+import type { ChatTheme } from "./chat-theme";
 import { parseToolPart } from "./action-card";
 
 // 現在アクティブな assistant メッセージに含まれる step-start/finish と tool を
 // 集計して、1 行コンパクトな「進捗サマリ」として表示する。
 // 上下分割レイアウトの下段 (会話ログと composer の間) に置く前提。
 //
-// 表示内容:
-// - ステップ進行: [✓] × 完了数 + [●] 進行中 (step-start > step-finish)
-// - 現在実行中 tool: 最新の tool part (Read/Edit/Bash/etc.) の短い要約
-// - アイドル時は最新ステップの件数のみコンパクトに
+// theme: パネル (Coding/Analyze/Business) に応じた色トークン。Business は白地、
+// Coding/Analyze は黒地。CHAT_THEMES から渡す。
 export function ProgressPane({
   messages,
   parts,
   busy,
   activeId,
+  theme,
 }: {
   messages: MessageInfo[];
   parts: Record<string, PartInfo>;
   busy: boolean;
   activeId: string | null;
+  theme: ChatTheme;
 }) {
   const summary = useMemo(() => {
     if (!activeId) return null;
 
-    // 最新の assistant メッセージが対象 (直前の user turn 以降の作業)
     let latestAssistant: MessageInfo | undefined;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role !== "user") {
@@ -38,7 +37,6 @@ export function ProgressPane({
     }
     if (!latestAssistant) return null;
 
-    // 対象メッセージ内の part を type 別に集計
     let stepStart = 0;
     let stepFinish = 0;
     const tools: PartInfo[] = [];
@@ -57,10 +55,9 @@ export function ProgressPane({
   }, [messages, parts, activeId]);
 
   if (!summary) {
-    // セッション未選択 or メッセージなしの時はペイン自体を薄く
     return (
       <div
-        className={`flex flex-none items-center gap-3 border-t ${CODING_THEME.cardBorder} px-4 py-2 text-white/40`}
+        className={`flex flex-none items-center gap-3 border-t ${theme.progressBorder} ${theme.progressMutedText} px-4 py-2`}
         style={{ fontSize: "0.85em" }}
       >
         <span>進捗なし · 新しい指示を待機中</span>
@@ -70,13 +67,12 @@ export function ProgressPane({
 
   const { stepStart, stepFinish, runningStep, latestTool, toolCount } = summary;
 
-  // ステップチェックボックス群 (完了 + 進行中)
   const checks: React.ReactNode[] = [];
   for (let i = 0; i < stepFinish; i++) {
     checks.push(
       <CheckCircle2
         key={`done-${i}`}
-        className={CODING_THEME.cardAccentRead}
+        className={theme.progressDoneIcon}
         style={{ width: "0.95em", height: "0.95em" }}
       />,
     );
@@ -85,13 +81,12 @@ export function ProgressPane({
     checks.push(
       <Circle
         key={`running-${i}`}
-        className={`${CODING_THEME.cardAccentRun} animate-pulse`}
+        className={`${theme.progressRunIcon} animate-pulse`}
         style={{ width: "0.95em", height: "0.95em" }}
       />,
     );
   }
 
-  // 現在実行中 tool (最新 tool)。busy 中なら「実行中」、完了後は「最後に実行」
   let toolLabel: React.ReactNode = null;
   if (latestTool) {
     const parsed = parseToolPart(latestTool);
@@ -107,7 +102,7 @@ export function ProgressPane({
     toolLabel = (
       <span className="flex min-w-0 items-center gap-1.5 truncate">
         <Zap
-          className={busy ? `${CODING_THEME.cardAccentRun} animate-pulse` : "text-white/40"}
+          className={busy ? `${theme.progressRunIcon} animate-pulse` : theme.progressMutedText}
           style={{ width: "0.95em", height: "0.95em" }}
         />
         {busy ? (
@@ -116,8 +111,8 @@ export function ProgressPane({
           </span>
         ) : (
           <>
-            <span className="text-white/60">{verb}:</span>
-            <span className="truncate font-mono text-white/90">
+            <span className={theme.progressVerbText}>{verb}:</span>
+            <span className={`truncate font-mono ${theme.progressTargetText}`}>
               {parsed.tool} {target}
             </span>
           </>
@@ -128,32 +123,32 @@ export function ProgressPane({
 
   return (
     <div
-      className={`flex flex-none items-center gap-3 border-t ${CODING_THEME.cardBorder} px-4 py-2`}
+      className={`flex flex-none items-center gap-3 border-t ${theme.progressBorder} px-4 py-2`}
       style={{ fontSize: "0.85em" }}
     >
       <span className="flex items-center gap-2">
-        <span className="text-white/50">ステップ:</span>
+        <span className={theme.progressLabelText}>ステップ:</span>
         {checks.length > 0 ? (
           <span className="flex items-center gap-1">{checks}</span>
         ) : (
-          <span className="text-white/40">—</span>
+          <span className={theme.progressMutedText}>—</span>
         )}
-        <span className="text-white/50">
+        <span className={theme.progressLabelText}>
           {stepFinish}/{stepStart || stepFinish} 完了
         </span>
         {runningStep > 0 && (
           <span className="opencode-shimmer">· {runningStep} 進行中</span>
         )}
       </span>
-      <span className="h-3 w-px bg-white/10" />
+      <span className={`h-3 w-px ${theme.progressDivider}`} />
       {toolLabel ?? (
-        <span className="flex items-center gap-1.5 text-white/40">
+        <span className={`flex items-center gap-1.5 ${theme.progressMutedText}`}>
           <Zap style={{ width: "0.95em", height: "0.95em" }} />
           tool 実行なし
         </span>
       )}
       {toolCount > 1 && (
-        <span className="ml-auto flex-none text-white/40">
+        <span className={`ml-auto flex-none ${theme.progressMutedText}`}>
           · 累計 {toolCount} tool
         </span>
       )}

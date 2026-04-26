@@ -75,6 +75,27 @@ export type ChatTheme = {
   composerBusyOff: string;
   abortBtn: string;
   sendBtn: string;
+  composerDropActive: string; // DnD ホバー時の border / bg overlay
+
+  // progress pane (ステップ / 実行中 tool の 1 行サマリ)
+  progressBorder: string; // border-t
+  progressDoneIcon: string; // CheckCircle2 (完了)
+  progressRunIcon: string; // Circle / Zap (進行中, 鼓動)
+  progressMutedText: string; // 「—」「tool 実行なし」「累計 N tool」
+  progressLabelText: string; // 「ステップ:」「N/M 完了」
+  progressVerbText: string; // 「実行中:」「最後に実行:」
+  progressTargetText: string; // tool 名 + path
+  progressDivider: string; // セパレータ縦線
+
+  // phase tabs (フェーズ切替 inline-flex)
+  phaseLabel: string; // 「フェーズ:」見出し
+  phaseGroupBorder: string; // inline-flex の外枠
+  phaseTabActive: string;
+  phaseTabInactive: string;
+
+  // quick template buttons
+  templateLabel: string; // 「テンプレ:」見出し
+  templateBtn: string; // テンプレボタン (border + bg + hover)
 };
 
 export const CHAT_THEMES: Record<ChatVariant, ChatTheme> = {
@@ -146,6 +167,27 @@ export const CHAT_THEMES: Record<ChatVariant, ChatTheme> = {
     abortBtn: "bg-red-600 hover:bg-red-500 text-white",
     sendBtn:
       "bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-gray-300",
+    composerDropActive:
+      "ring-2 ring-emerald-400 ring-offset-1 ring-offset-white",
+
+    progressBorder: "border-gray-200",
+    progressDoneIcon: "text-emerald-600",
+    progressRunIcon: "text-emerald-600",
+    progressMutedText: "text-gray-400",
+    progressLabelText: "text-gray-500",
+    progressVerbText: "text-gray-600",
+    progressTargetText: "text-gray-900",
+    progressDivider: "bg-gray-200",
+
+    phaseLabel: "text-gray-500",
+    phaseGroupBorder: "border border-emerald-200",
+    phaseTabActive: "bg-emerald-100 text-emerald-800",
+    phaseTabInactive:
+      "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+
+    templateLabel: "text-gray-500",
+    templateBtn:
+      "border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900",
   },
 
   coding: {
@@ -216,6 +258,27 @@ export const CHAT_THEMES: Record<ChatVariant, ChatTheme> = {
     abortBtn: "bg-red-600 hover:bg-red-500 text-white",
     sendBtn:
       "bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-white/10 disabled:text-white/40",
+    composerDropActive:
+      "ring-2 ring-emerald-400 ring-offset-1 ring-offset-[#15151c]",
+
+    progressBorder: "border-white/10",
+    progressDoneIcon: "text-emerald-400",
+    progressRunIcon: "text-sky-400",
+    progressMutedText: "text-white/40",
+    progressLabelText: "text-white/50",
+    progressVerbText: "text-white/60",
+    progressTargetText: "text-white/90",
+    progressDivider: "bg-white/10",
+
+    phaseLabel: "text-white/40",
+    phaseGroupBorder: "border border-white/10",
+    phaseTabActive: "bg-emerald-500/25 text-emerald-200",
+    phaseTabInactive:
+      "text-white/60 hover:bg-white/5 hover:text-white/90",
+
+    templateLabel: "text-white/40",
+    templateBtn:
+      "border border-white/10 text-white/70 hover:bg-white/5 hover:text-white/90",
   },
 
   // Analyze パネル: 既存ソース分析 + 設計資料 (Markdown) 生成。
@@ -289,5 +352,26 @@ export const CHAT_THEMES: Record<ChatVariant, ChatTheme> = {
     abortBtn: "bg-red-600 hover:bg-red-500 text-white",
     sendBtn:
       "bg-violet-600 hover:bg-violet-500 text-white disabled:bg-white/10 disabled:text-white/40",
+    composerDropActive:
+      "ring-2 ring-violet-400 ring-offset-1 ring-offset-[#1a1530]",
+
+    progressBorder: "border-white/10",
+    progressDoneIcon: "text-emerald-400",
+    progressRunIcon: "text-sky-400",
+    progressMutedText: "text-white/40",
+    progressLabelText: "text-white/50",
+    progressVerbText: "text-white/60",
+    progressTargetText: "text-white/90",
+    progressDivider: "bg-white/10",
+
+    phaseLabel: "text-white/40",
+    phaseGroupBorder: "border border-white/10",
+    phaseTabActive: "bg-violet-500/25 text-violet-200",
+    phaseTabInactive:
+      "text-white/60 hover:bg-white/5 hover:text-white/90",
+
+    templateLabel: "text-white/40",
+    templateBtn:
+      "border border-white/10 text-white/70 hover:bg-white/5 hover:text-white/90",
   },
 };

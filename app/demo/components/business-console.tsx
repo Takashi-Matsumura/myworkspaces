@@ -10,19 +10,20 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
-  Telescope,
-  Boxes,
-  Plug,
-  Database,
-  ArrowRightLeft,
-  FileSearch,
+  Table2,
+  FileText,
+  Globe,
+  Sparkles,
+  Image as ImageIcon,
+  ClipboardList,
+  Search,
+  Layers,
 } from "lucide-react";
 import {
   useOpencodeStream,
   type PartInfo,
 } from "./use-opencode-stream";
 import { CHAT_THEMES } from "./chat-theme";
-import { ANALYSIS_THEME } from "./analysis-theme";
 import { useStreamStats } from "./use-stream-stats";
 import { SkillsResponseSchema, WorkspaceMinimalListSchema } from "@/lib/api-schemas";
 import { expandSlashCommand, type SkillSummary } from "./opencode-chat";
@@ -35,150 +36,148 @@ import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
 
-// Analyze パネルの分析フェーズ。route.ts の ANALYZE_PREFIXES と対応。
-type AnalyzeMode = "survey" | "detail" | "port";
+// Biz パネルのフェーズ。route.ts の BIZ_PREFIXES と対応。
+type BizPhase = "data" | "doc" | "web" | "synth";
 
-// 入力欄上部のクイックテンプレート。出力先は docs/analysis/<NN-name>.md に固定し、
-// 根拠 (path:line) 併記を毎回ルール側に念押しする。実装ファイルは書き換えない。
-const ANALYZE_TEMPLATES: {
-  id: "overview" | "modules" | "api" | "data" | "porting";
+// クイックテンプレ。出力先は reports/ または research/ に固定し、入力ファイルを
+// `@inputs/<name>` でメンションする習慣を Gemma 4 に教える。
+const BIZ_TEMPLATES: {
+  id: "kpi-summary" | "pdf-digest" | "image-evidence" | "competitor-scan" | "triangulate";
   label: string;
-  icon: typeof Telescope;
+  icon: typeof Table2;
+  phase: BizPhase;
   template: string;
 }[] = [
   {
-    id: "overview",
-    label: "全体像把握",
-    icon: Telescope,
-    template: `このワークスペースのソースコードを概観してください。
+    id: "kpi-summary",
+    label: "KPI サマリ",
+    icon: Table2,
+    phase: "data",
+    template: `@inputs/ 配下の CSV/XLSX を集計して、KPI サマリを reports/data-<topic>.md に書いてください。
 
-1. \`bash\` で \`find . -type f \\( -name '*.cs' -o -name '*.java' -o -name '*.php' \\) | head -200\` を実行して候補を列挙
-2. ルートのビルド設定 (\`*.csproj\` / \`pom.xml\` / \`composer.json\` 等) を \`read\` で読み、言語・FW・主要依存を特定
-3. エントリポイント (Main / public static void main / index.php / front controller) を見つけて 1 ファイル代表で読む
-4. \`bash\` で \`mkdir -p docs/analysis\` を実行
-5. \`write\` で \`docs/analysis/00-overview.md\` を保存。章構成は ## 概要 / ## 言語と FW / ## 主要ディレクトリ / ## エントリポイント / ## 推定アーキテクチャ
-6. 各記述の根拠は (path:line) 形式で必ず付ける
+1. \`bash\` で \`ls inputs/\` を実行し、対象候補を列挙
+2. 各 .csv / .xlsx を \`read_excel\` で読み (まず 200 行)、列構成・ヘッダ・期間を把握
+3. \`mkdir -p reports\` した上で \`write\` で reports/data-<topic>.md を生成
+4. 章立て: ## 概要 / ## 期間と粒度 / ## KPI 表 / ## トレンド (Mermaid pie or barChart) / ## 異常値・欠損 / ## 出典
+5. 各記述に出典 (path, sheet "<name>", row N) を必ず添える
+6. read_excel で読めない値は「未確認」と書く
 
-=== 補足指示 (任意) ===
-
-`,
-  },
-  {
-    id: "modules",
-    label: "クラス・関数一覧",
-    icon: Boxes,
-    template: `主要モジュールのクラス・関数一覧を作ってください。
-
-1. 対象ディレクトリを \`bash\` で \`find -maxdepth 3 -type d\` で列挙
-2. 上位 20 ファイルを \`read\` で読み、public クラス / public メソッドを抽出
-3. \`write\` で \`docs/analysis/10-modules.md\` を作成
-4. 章構成: ## モジュール一覧 (表) / ## クラス・関数 (file 単位の見出し) / ## 依存関係グラフ (mermaid)
-5. 推測で書かない。読めなかった箇所は「未読」と明記する
-
-=== 対象範囲 (空欄なら repo 全体) ===
+=== 補足 (任意。空欄なら全件で動く) ===
 
 `,
   },
   {
-    id: "api",
-    label: "API 仕様抽出",
-    icon: Plug,
-    template: `公開 API (HTTP エンドポイント / 公開クラスの公開メソッド) を抽出してください。
+    id: "pdf-digest",
+    label: "PDF 要約",
+    icon: FileText,
+    phase: "doc",
+    template: `@inputs/ 配下の PDF を要約し、reports/doc-<topic>.md に出力してください。
 
-1. \`bash\` の grep で検出:
-   - C#: \`grep -rn "\\[Route\\|\\[Http"\`
-   - Java: \`grep -rn "@RequestMapping\\|@GetMapping\\|@PostMapping"\`
-   - PHP: \`grep -rn "Route::\\|extends Controller"\`
-2. 各エンドポイントの URL / method / path param / query / body / response を \`read\` で読み解く
-3. \`write\` で \`docs/analysis/20-api.md\` に Markdown 表で出力
-   | path | method | params | request body | response | 認証 | 根拠 (path:line) |
-4. 表の前に「## 認証・認可方針」「## 共通レスポンス形式」の節を置く
+1. \`bash\` で \`ls inputs/*.pdf\` で対象を列挙
+2. 各 PDF を \`read_pdf\` で取得 (まず "1-2" ページで概観 → 必要に応じて続き)
+3. \`mkdir -p reports\` 後 \`write\` で reports/doc-<topic>.md を生成
+4. 章立て: ## エグゼクティブサマリ (3 段落) / ## 重要数字 (表) / ## 引用ハイライト / ## 留意点
+5. 各記述に出典 (path, page N) を必ず添える
+6. 数字は read_pdf で確認できたものだけ。読めなかったら「未確認」と書く
 
 === 補足 (任意) ===
 
 `,
   },
   {
-    id: "data",
-    label: "データモデル抽出",
-    icon: Database,
-    template: `永続データモデルを抽出してください。
+    id: "image-evidence",
+    label: "画像エビデンス",
+    icon: ImageIcon,
+    phase: "doc",
+    template: `@inputs/ 配下の画像 (.png/.jpg 等) を読み、reports/doc-images-<topic>.md に整理してください。
 
-1. \`bash\` の grep で検出:
-   - C#: \`grep -rn ": DbContext\\|\\[Table\\|\\[Key\\|\\[Column"\`
-   - Java: \`grep -rn "@Entity\\|@Table\\|@Column"\`
-   - PHP: \`grep -rn "extends Model\\|Schema::create\\|@ORM"\`
-2. 各エンティティを \`read\` で確認し、テーブル名・主キー・外部キー・列型を抽出
-3. \`write\` で \`docs/analysis/30-data-model.md\` に保存
-   - ## エンティティ一覧 (表)
-   - ## テーブル定義 (各エンティティを ### で見出し化、列を表に)
-   - ## ER 図 (mermaid erDiagram)
-4. SQL マイグレーションがあれば順序付きで列挙
+1. \`bash\` で \`ls inputs/*.{png,jpg,jpeg,webp,gif} 2>/dev/null\` で対象列挙
+2. 各画像を \`describe_image\` で説明取得 (必要に応じて question を渡す)
+3. \`write\` で reports/doc-images-<topic>.md を生成
+4. 各画像ごとに ### <filename> の見出し + 「写っているもの」「想定文脈」「注意点」の 3 段落
+5. 推測でラベルを増やさない。describe_image の出力にないものは書かない
 
-=== 補足 (任意) ===
+=== 補足 (任意。読み取り目的を入れると describe_image の question に流用) ===
 
 `,
   },
   {
-    id: "porting",
-    label: "移植ガイド作成",
-    icon: ArrowRightLeft,
-    template: `このコードを別言語で再実装するエージェント向けの引き継ぎ書を作ってください。
+    id: "competitor-scan",
+    label: "競合スキャン",
+    icon: Search,
+    phase: "web",
+    template: `指定企業 (または領域) について、Web から多角的に調査し research/<slug>.md にまとめてください。
 
-前提: 既存ファイル (\`docs/analysis/00-overview.md\` / \`10-modules.md\` / \`20-api.md\` / \`30-data-model.md\`) があれば \`read\` で読み込み、無ければ最低限の概観だけ取り直す。
+注意: web_search ツールは Phase B 以降で導入されます。未導入の段階ではこのテンプレは「未対応」と返してください。
 
-成果物: \`docs/analysis/90-porting-guide.md\`
+導入後の手順:
+1. 問いを 3-5 個のサブクエリに分解
+2. 各サブクエリを web_search (max_results: 5) で検索
+3. 上位 2 件は web_search の read_url で本文を取得
+4. \`mkdir -p research\` 後 research/<slug>.md に append
+5. 章: ## サブクエリ N: ... / 引用 [^N]
+6. 末尾に [^N]: <URL> を集約。引用 3 件以上必須
 
-章構成:
-- ## 概要 (移植元と推奨移植先の選択肢)
-- ## 機能要件 (ユースケース単位で「入力 → 処理 → 出力」を箇条書き)
-- ## 非機能要件 (永続化 / 認証 / 並行性 / 例外)
-- ## 公開インターフェース契約 (API 表 + サンプル req/res)
-- ## 内部副作用 (DB / ファイル / 外部 HTTP / メール / キャッシュ)
-- ## 移植時の注意 (言語固有のイディオム差・ライセンス・既知バグ)
-- ## 推奨実装順序 (依存少ない順に番号付きリスト)
+=== 調査対象 (例: 競合 SaaS 3 社の最新事業動向) ===
 
-=== 移植先言語 (未定なら空欄) ===
+`,
+  },
+  {
+    id: "triangulate",
+    label: "三面統合レポート",
+    icon: Layers,
+    phase: "synth",
+    template: `Data / Doc / Web の各成果物を統合し、reports/<topic>-summary.md に多角分析レポートを書いてください。
+
+1. \`bash\` で \`ls reports/ research/ 2>/dev/null\` で既存成果物を列挙
+2. 関連する .md を \`read\` で読み込む
+3. \`write\` で reports/<topic>-summary.md を生成
+4. 章: ## 1. データ視点 (Data) / ## 2. ドキュメント視点 (Doc) / ## 3. Web 視点 (Web) / ## 4. 統合インサイト / ## 5. 推奨アクション
+5. 各引用は出典付き (ローカル: path:line または path,page N。Web: [^N] 脚注 + 末尾に集約)
+6. 「3 視点が一致する点」「矛盾点」「未確認事項」を箇条書きで明記
+
+=== 統合トピック (例: 競合 X 社 vs. 自社の優位性) ===
 
 `,
   },
 ];
 
-const MODE_BUTTONS: {
-  id: AnalyzeMode;
+const PHASE_BUTTONS: {
+  id: BizPhase;
   label: string;
-  icon: typeof Telescope;
+  icon: typeof Table2;
   title: string;
 }[] = [
   {
-    id: "survey",
-    label: "Survey",
-    icon: Telescope,
-    title: "Survey: repo 構造把握フェーズ。bash と read を中心に 00-overview.md を書く",
+    id: "data",
+    label: "Data",
+    icon: Table2,
+    title: "Data: CSV/XLSX を集計し reports/data-*.md に KPI サマリを書く",
   },
   {
-    id: "detail",
-    label: "Detail",
-    icon: FileSearch,
-    title: "Detail: 詳細抽出フェーズ。docs/analysis/ 配下の 10/20/30 系 .md を書く",
+    id: "doc",
+    label: "Doc",
+    icon: FileText,
+    title: "Doc: PDF/画像を要約し reports/doc-*.md に出典付きで書く",
   },
   {
-    id: "port",
-    label: "Port",
-    icon: ArrowRightLeft,
-    title: "Port: 移植ガイドフェーズ。既存資料を読んで 90-porting-guide.md を生成",
+    id: "web",
+    label: "Web",
+    icon: Globe,
+    title: "Web: ネット調査 (DeepSearch) で research/<slug>.md を蓄積 (Phase B 以降)",
+  },
+  {
+    id: "synth",
+    label: "Synthesize",
+    icon: Sparkles,
+    title: "Synthesize: reports/ と research/ を統合し reports/<topic>-summary.md を生成",
   },
 ];
 
-// Analyze パネル表面。CodingConsole とほぼ同じ構造だが、
-// - theme = CHAT_THEMES.analyze (バイオレット系)
-// - agent (plan/build) ではなく mode (survey/detail/port) を持つ
-// - テンプレートは ANALYZE_TEMPLATES (実装ではなく分析用)
-// - ヘッダ表示は "analyze"
-// 同 OpenCode サイドカーを Coding/Business/Analyze で共有しているため、
-// 区別は variant + mode の prefix 付加 (route.ts) と analyze-rules.md で行う。
-export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }) {
-  const theme = CHAT_THEMES.analyze;
+// Biz パネル: ビジネス向けマルチモーダル分析 + (Phase B 以降) DeepSearch。
+// Coding/Analyze と同じ opencode サイドカーを共有し、variant + mode で挙動を分ける。
+export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }) {
+  const theme = CHAT_THEMES.business;
   const {
     state,
     refreshSessions,
@@ -193,11 +192,13 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [mode, setMode] = useState<AnalyzeMode>("survey");
+  const [phase, setPhase] = useState<BizPhase>("data");
   const [activating, setActivating] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   const loadSkills = useCallback(async () => {
     try {
@@ -209,7 +210,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
     }
   }, []);
 
-  // 初回: workspace activate → sessions / config 取得 (Coding/Business と同じ)
+  // 初回: workspace activate → sessions / config 取得 (Coding/Analyze と同じ)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -225,6 +226,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
             body: JSON.stringify({ workspaceId: wid }),
           });
           if (!a.ok) throw new Error(`activate ${a.status}`);
+          if (!cancelled) setActiveWorkspaceId(wid);
         }
         if (!cancelled) {
           await refreshSessions();
@@ -245,8 +247,12 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
     if (activeId) void loadMessages(activeId);
   }, [activeId, loadMessages]);
 
+  // ワークスペース切替時。floating-workspace.tsx が activate 成功で dispatch。
   useEffect(() => {
-    const handler = () => {
+    const handler = (ev: Event) => {
+      // CustomEvent の detail に新 workspaceId が入っているはず (任意)
+      const detail = (ev as CustomEvent<{ workspaceId?: string }>).detail;
+      if (detail?.workspaceId) setActiveWorkspaceId(detail.workspaceId);
       setActiveId(null);
       void (async () => {
         await loadConfig();
@@ -277,18 +283,73 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
     try {
       const expanded = expandSlashCommand(text, skills);
       const ok = await sendPrompt(activeId, expanded, {
-        variant: "analyze",
-        mode,
+        variant: "business",
+        mode: phase,
       });
       if (ok) setInput("");
     } finally {
       setSending(false);
     }
-  }, [input, activeId, sendPrompt, skills, mode]);
+  }, [input, activeId, sendPrompt, skills, phase]);
 
-  const applyTemplate = useCallback((template: string) => {
-    setInput(template);
-  }, []);
+  const applyTemplate = useCallback(
+    (
+      tpl: { template: string; phase: BizPhase },
+    ) => {
+      setInput(tpl.template);
+      setPhase(tpl.phase);
+    },
+    [],
+  );
+
+  // DnD アップロード。inputs/<filename> に配置 → composer に @inputs/<name> を挿入。
+  const handleFilesDropped = useCallback(
+    async (files: File[]) => {
+      if (!activeWorkspaceId) {
+        setUploadStatus("ワークスペース未確定です。少し待って再試行してください。");
+        return;
+      }
+      if (files.length === 0) return;
+      setUploadStatus(`アップロード中: 0 / ${files.length}`);
+      const targetDir = `/root/workspaces/${activeWorkspaceId}`;
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const fd = new FormData();
+        fd.append("targetDir", targetDir);
+        fd.append("relativePath", `inputs/${f.name}`);
+        fd.append("file", f);
+        try {
+          const resp = await fetch("/api/workspace/upload", {
+            method: "POST",
+            body: fd,
+          });
+          if (resp.ok) succeeded.push(f.name);
+          else failed.push(f.name);
+        } catch {
+          failed.push(f.name);
+        }
+        setUploadStatus(`アップロード中: ${i + 1} / ${files.length}`);
+      }
+      if (succeeded.length > 0) {
+        const mentions = succeeded.map((n) => `@inputs/${n}`).join(" ");
+        setInput((prev) => (prev.length === 0 ? mentions + " " : prev + " " + mentions));
+        // composer にフォーカスを戻す
+        composerRef.current?.focus();
+      }
+      if (failed.length > 0) {
+        setUploadStatus(
+          `${succeeded.length} 件成功 / ${failed.length} 件失敗 (${failed.join(", ")})`,
+        );
+      } else {
+        setUploadStatus(`${succeeded.length} 件アップロード完了`);
+        // 成功のみなら数秒で消す
+        setTimeout(() => setUploadStatus(null), 2500);
+      }
+    },
+    [activeWorkspaceId],
+  );
 
   const onNewSession = useCallback(async () => {
     const s = await createSession();
@@ -390,7 +451,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
           <span className={theme.brandCode}>code</span>
         </span>
         <span className={theme.mutedText} style={{ fontSize: "0.85em" }}>
-          analyze
+          biz
         </span>
         <span
           className={`rounded px-1.5 py-0.5 ${
@@ -428,9 +489,9 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
         )}
         <span className="ml-auto flex items-center gap-2">
           <span
-            className={`hidden truncate rounded px-2 py-0.5 sm:inline-block ${ANALYSIS_THEME.headerStatBadge}`}
+            className="hidden truncate rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700 sm:inline-block"
             style={{ fontSize: "0.8em" }}
-            title={`${statusLine}\n\n応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差替。コンテキストはセッション全文のトークン数と上限の比。`}
+            title={`${statusLine}\n\n応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差替。`}
           >
             {statusLine}
           </span>
@@ -457,9 +518,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
           aria-hidden="true"
         />
         <div
-          className={`absolute inset-y-0 left-0 z-20 w-48 transition-transform duration-200 ease-out ${
-            ANALYSIS_THEME.drawerBg
-          } ${ANALYSIS_THEME.drawerShadow} ${
+          className={`absolute inset-y-0 left-0 z-20 w-48 ${theme.sidebarBg} shadow-2xl shadow-black/10 transition-transform duration-200 ease-out ${
             sessionDrawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           aria-hidden={!sessionDrawerOpen}
@@ -493,10 +552,11 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
                   からセッションを選ぶか「新規セッション」で開始してください。
                 </span>
                 <span className="block">
-                  既存ソースを Workspace に配置した状態でテンプレを選び、
+                  CSV / XLSX / PDF / 画像をパネル下部にドラッグ&ドロップして取り込み、
                 </span>
                 <span className="block">
-                  <code>docs/analysis/*.md</code> に設計資料を生成します。
+                  フェーズ + テンプレを選んで送信すると <code>reports/*.md</code> に
+                  分析レポートが生成されます。
                 </span>
               </p>
             </div>
@@ -518,7 +578,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
                   const p = state.parts[pid];
                   if (!p) return null;
                   return (
-                    <MessagePartAnalyze
+                    <MessagePartBiz
                       key={`${messageId}:${pid}`}
                       part={p}
                     />
@@ -544,25 +604,28 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
       <div
         className={`flex-none border-t ${theme.headerBorder} ${theme.headerBg} px-3 py-2`}
       >
-        {/* 分析フェーズ切替 (route.ts の ANALYZE_PREFIXES と対応) */}
+        {/* フェーズ切替 (route.ts の BIZ_PREFIXES と対応) */}
         <div className="mb-2 flex items-center gap-2">
-          <span className="text-[10px] text-white/40">フェーズ:</span>
-          <div className="inline-flex overflow-hidden rounded border border-white/10">
-            {MODE_BUTTONS.map((btn) => {
+          <span className={theme.phaseLabel} style={{ fontSize: "0.7em" }}>
+            フェーズ:
+          </span>
+          <div
+            className={`inline-flex overflow-hidden rounded ${theme.phaseGroupBorder}`}
+          >
+            {PHASE_BUTTONS.map((btn) => {
               const Icon = btn.icon;
-              const active = mode === btn.id;
+              const active = phase === btn.id;
               return (
                 <button
                   key={btn.id}
                   type="button"
-                  onClick={() => setMode(btn.id)}
+                  onClick={() => setPhase(btn.id)}
                   disabled={sending}
                   title={btn.title}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40 ${
-                    active
-                      ? "bg-violet-500/25 text-violet-200"
-                      : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 transition-colors disabled:opacity-40 ${
+                    active ? theme.phaseTabActive : theme.phaseTabInactive
                   }`}
+                  style={{ fontSize: "0.75em" }}
                 >
                   <Icon className="h-3 w-3" />
                   {btn.label}
@@ -572,19 +635,26 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
           </div>
         </div>
 
-        {/* クイックテンプレート: 入力欄に分析手順の雛形を展開 */}
+        {/* クイックテンプレート */}
         <div className="mb-2 flex flex-wrap items-center gap-1">
-          <span className="text-[10px] text-white/40">テンプレ:</span>
-          {ANALYZE_TEMPLATES.map((tpl) => {
+          <span className={theme.templateLabel} style={{ fontSize: "0.7em" }}>
+            <ClipboardList
+              className="mr-0.5 inline-block align-[-0.15em]"
+              style={{ width: "1em", height: "1em" }}
+            />
+            テンプレ:
+          </span>
+          {BIZ_TEMPLATES.map((tpl) => {
             const Icon = tpl.icon;
             return (
               <button
                 key={tpl.id}
                 type="button"
-                onClick={() => applyTemplate(tpl.template)}
+                onClick={() => applyTemplate(tpl)}
                 disabled={sending || !activeId}
-                title={`${tpl.label}テンプレを入力欄に展開`}
-                className="inline-flex items-center gap-1 rounded border border-white/10 px-2 py-0.5 text-[11px] text-white/70 transition-colors hover:bg-white/5 hover:text-white/90 disabled:opacity-40"
+                title={`${tpl.label} (${tpl.phase} フェーズ) のテンプレを入力欄に展開`}
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors disabled:opacity-40 ${theme.templateBtn}`}
+                style={{ fontSize: "0.75em" }}
               >
                 <Icon className="h-3 w-3" />
                 {tpl.label}
@@ -592,6 +662,16 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
             );
           })}
         </div>
+
+        {uploadStatus && (
+          <div
+            className={`mb-1 ${theme.phaseLabel}`}
+            style={{ fontSize: "0.7em" }}
+          >
+            {uploadStatus}
+          </div>
+        )}
+
         <InlineComposer
           ref={composerRef}
           disabled={sending || !activeId}
@@ -605,22 +685,23 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
           skills={skills}
           statusLine={statusLine}
           theme={theme}
+          onFilesDropped={handleFilesDropped}
         />
       </div>
     </div>
   );
 }
 
-// Analyze 用 MessagePart: reasoning → ReasoningPart 再利用 (テーマだけ analyze)
-// text → prism 統合 markdown / tool & step-* → PartAsCard
-function MessagePartAnalyze({ part }: { part: PartInfo }) {
+// Biz 用 MessagePart: reasoning / text / その他で振り分け。
+// テーマは business 専用 (白地 + emerald)。
+function MessagePartBiz({ part }: { part: PartInfo }) {
   if (part.type === "reasoning") {
-    return <ReasoningPart part={part} theme={CHAT_THEMES.analyze} />;
+    return <ReasoningPart part={part} theme={CHAT_THEMES.business} />;
   }
   if (part.type === "text") {
     return (
       <div
-        className="prose prose-invert max-w-none"
+        className="prose max-w-none"
         style={{ fontSize: "inherit", lineHeight: 1.55 }}
       >
         <ReactMarkdown

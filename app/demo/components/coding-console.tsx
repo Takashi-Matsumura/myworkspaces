@@ -458,6 +458,7 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
         parts={state.parts}
         busy={busy}
         activeId={activeId}
+        theme={theme}
       />
 
       {/* 下部固定コンポーザ */}

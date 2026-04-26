@@ -480,9 +480,18 @@ export function useOpencodeStream() {
       opts?: {
         variant?: "coding" | "business" | "analyze";
         agent?: "plan" | "build";
-        // Analyze パネルの分析フェーズ。route.ts 側で対応 prefix に変換され、
-        // opencode には転送されない (UI 専用概念)
-        mode?: "survey" | "detail" | "port";
+        // route.ts 側で対応 prefix に変換され、opencode には転送されない
+        // (UI 専用概念)。
+        // - analyze: "survey" | "detail" | "port"
+        // - business (Biz パネルのフェーズ): "data" | "doc" | "web" | "synth"
+        mode?:
+          | "survey"
+          | "detail"
+          | "port"
+          | "data"
+          | "doc"
+          | "web"
+          | "synth";
       },
     ): Promise<boolean> => {
       const body: Record<string, unknown> = {
