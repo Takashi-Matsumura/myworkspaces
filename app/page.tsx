@@ -84,6 +84,7 @@ export default function Home() {
         onStartCoding={() => openTerminal("coding")}
         onStartBusiness={() => openTerminal("business")}
         onStartUbuntu={() => openTerminal("ubuntu")}
+        onStartAnalyze={() => openTerminal("analyze")}
         onZoomToFit={(rect) => canvasRef.current?.zoomToRect(rect)}
         onResetContainer={resetContainer}
         z={panels.zFor("workspace")}

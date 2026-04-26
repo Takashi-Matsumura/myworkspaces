@@ -61,6 +61,18 @@ const THEMES: Record<Exclude<TerminalVariant, "ubuntu">, Theme> = {
     primaryBtn:
       "bg-white text-[#1b5e3a] hover:bg-white/90 font-medium",
   },
+  analyze: {
+    backdrop: "rgba(0,0,0,0.55)",
+    card: "border border-violet-500/30 bg-[#1a1530]",
+    kbd: "border-violet-400/30 bg-violet-500/10 text-white",
+    heading: "text-white",
+    text: "text-white/90",
+    muted: "text-white/60",
+    closeBtn: "text-white/60 hover:bg-white/10 hover:text-white",
+    secondaryBtn: "border border-white/20 text-white/80 hover:bg-white/10",
+    primaryBtn:
+      "bg-violet-500 text-black hover:bg-violet-400 font-medium",
+  },
 };
 
 export default function OpencodeHintOverlay({
@@ -98,7 +110,9 @@ export default function OpencodeHintOverlay({
   const heading =
     variant === "business"
       ? "Business パネル（Excel・CSV 対応）の使い方"
-      : "Coding パネル（opencode）の使い方";
+      : variant === "analyze"
+        ? "Analyze パネル（コード分析・設計資料生成）の使い方"
+        : "Coding パネル（opencode）の使い方";
 
   return (
     <div

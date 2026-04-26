@@ -20,6 +20,7 @@ const RULE_FILES = [
   "business-rules.md",
   "pdf-rules.md",
   "coding-rules.md",
+  "analyze-rules.md",
 ];
 const RULES_SUBDIR = ".opencode/rules";
 const TEMPLATE_RULES = RULE_FILES.map((f) => `${RULES_SUBDIR}/${f}`);
@@ -540,8 +541,21 @@ export function exportWorkspaceAsZip(
       archive.on("error", (e) => out.destroy(e));
       archive.pipe(out);
 
+      // ZIP に含めない tar エントリ:
+      // - .opencode/node_modules/ : opencode CLI が次回起動時に自動再生成する
+      //   依存ツリー (約 58MB)。後段エージェントへの引き渡しでも不要なため除外。
+      const isExcluded = (name: string): boolean =>
+        /(^|\/)\.opencode\/node_modules(\/|$)/.test(name);
+
       const extract = tarExtract();
       extract.on("entry", (header, file, next) => {
+        if (isExcluded(header.name)) {
+          // tar の data は読み切らないと次のエントリに進めないので drain だけする
+          file.on("end", () => next());
+          file.on("error", (e) => next(e));
+          file.resume();
+          return;
+        }
         const chunks: Buffer[] = [];
         file.on("data", (c: Buffer) => chunks.push(c));
         file.on("end", () => {

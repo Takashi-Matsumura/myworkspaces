@@ -1,7 +1,7 @@
 // OpencodeChat を Business (白ベース) / Coding (黒ベース) で共用するためのテーマ定義。
 // ハードコード色を一か所にまとめ、variant で差し替える。
 
-export type ChatVariant = "business" | "coding";
+export type ChatVariant = "business" | "coding" | "analyze";
 
 export type ChatTheme = {
   // root
@@ -216,5 +216,78 @@ export const CHAT_THEMES: Record<ChatVariant, ChatTheme> = {
     abortBtn: "bg-red-600 hover:bg-red-500 text-white",
     sendBtn:
       "bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-white/10 disabled:text-white/40",
+  },
+
+  // Analyze パネル: 既存ソース分析 + 設計資料 (Markdown) 生成。
+  // coding をベースに emerald → violet (#7c3aed 系) に置換し、Coding/Business と
+  // 色相が完全に分かれるようにする。
+  analyze: {
+    rootBg: "bg-[#100c1f]",
+    rootText: "text-white/90",
+    rootExtra: "chat-dark",
+
+    headerBg: "bg-[#1a1530]",
+    headerBorder: "border-white/10",
+    iconBtn: "text-white/60 hover:bg-white/10 hover:text-white/90",
+    brandOpen: "text-white/40",
+    brandCode: "text-white",
+    mutedText: "text-white/40",
+    connectedOn: "bg-violet-500/20 text-violet-300",
+    connectedOff: "bg-white/10 text-white/60",
+    configCwdText: "text-white/60",
+    configLabelText: "text-white/40",
+    configModelText: "text-white/90",
+    errorText: "text-red-400",
+
+    sidebarBg: "bg-[#1a1530]",
+    sidebarBorder: "border-white/10",
+    newBtn:
+      "border-b border-white/10 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25",
+    sidebarEmpty: "text-white/40",
+    sidebarItemBorder: "border-white/10",
+    sidebarActive: "bg-violet-500/20",
+    sidebarHover: "hover:bg-white/5",
+    sidebarMutedSub: "text-white/50",
+    sidebarMutedMini: "text-white/40",
+    sidebarDangerBtn: "text-white/40 hover:text-red-400",
+
+    emptyText: "text-white/50",
+
+    userBubble: "bg-white/5",
+    assistantBubble: "border border-violet-500/30 bg-violet-500/10",
+    bubbleLabel: "text-white/50",
+    assistantAccent: "text-violet-300",
+
+    proseExtra: "prose-invert",
+
+    reasoningBorder: "border border-white/10 bg-white/5",
+    reasoningSummary: "text-white/60 hover:bg-white/5",
+    reasoningTabActive: "bg-white/15 text-white/90",
+    reasoningTabInactive: "text-white/60 hover:bg-white/10",
+    translateTabActive: "bg-violet-500/20 text-violet-200",
+    translateTabInactive: "text-violet-300 hover:bg-violet-500/10",
+    reasoningBodyText: "text-white/70",
+    translatedText: "text-white/80",
+    translatingText: "text-white/60",
+    translationCaretAccent: "text-violet-400",
+    retranslateBtn: "bg-violet-600 hover:bg-violet-500 text-white",
+
+    composerWrap:
+      "border border-violet-500/40 bg-[#1a1530] focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-500/30",
+    suggestWrap: "border border-white/10 bg-[#100c1f]",
+    suggestHeader: "border-b border-white/10 bg-[#1a1530] text-white/60",
+    suggestActive: "bg-violet-500/15",
+    suggestHover: "hover:bg-white/5",
+    suggestName: "text-violet-300",
+    suggestDesc: "text-white/50",
+    composerLabel: "text-violet-300",
+    composerTextarea:
+      "placeholder:text-white/30 disabled:bg-transparent disabled:text-white/30",
+    composerFooter: "border-t border-white/10",
+    composerBusyOn: "text-violet-300",
+    composerBusyOff: "text-white/60",
+    abortBtn: "bg-red-600 hover:bg-red-500 text-white",
+    sendBtn:
+      "bg-violet-600 hover:bg-violet-500 text-white disabled:bg-white/10 disabled:text-white/40",
   },
 };

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CodeXml, TerminalSquare } from "lucide-react";
+import { CodeXml, TerminalSquare, FileSearch } from "lucide-react";
 import type { TerminalVariant } from "../components/floating-terminal";
 import type { TerminalPanelId } from "../types/panels";
 
@@ -42,5 +42,14 @@ export const TERMINAL_PANEL_DEFINITIONS: readonly TerminalPanelDefinition[] = [
     switcherTitle: "Shell パネル (ubuntu / bash) を最前面に",
     switcherAccent: "#4f46e5",
     switcherIcon: <TerminalSquare className="h-3 w-3" />,
+  },
+  {
+    id: "analyze",
+    variant: "analyze",
+    slot: "right",
+    switcherLabel: "Analyze",
+    switcherTitle: "Analyze パネル (コード分析・設計資料生成) を最前面に",
+    switcherAccent: "#7c3aed",
+    switcherIcon: <FileSearch className="h-3 w-3" />,
   },
 ];

@@ -53,6 +53,7 @@ type FloatingWorkspaceProps = {
   onStartCoding: () => void;
   onStartBusiness: () => void;
   onStartUbuntu: () => void;
+  onStartAnalyze: () => void;
   onZoomToFit?: (rect: { x: number; y: number; w: number; h: number }) => void;
   onResetContainer: () => Promise<boolean>;
   z: number;
@@ -75,6 +76,7 @@ function FloatingWorkspaceInner({
   onStartCoding,
   onStartBusiness,
   onStartUbuntu,
+  onStartAnalyze,
   onZoomToFit,
   onResetContainer,
   z,
@@ -221,6 +223,7 @@ function FloatingWorkspaceInner({
         onStartCoding={onStartCoding}
         onStartBusiness={onStartBusiness}
         onStartUbuntu={onStartUbuntu}
+        onStartAnalyze={onStartAnalyze}
         onRefresh={triggerRefresh}
         onOpen={handleOpen}
       />

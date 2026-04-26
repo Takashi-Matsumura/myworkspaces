@@ -25,9 +25,13 @@ import { SettingsResponseSchema } from "@/lib/api-schemas";
 
 const XtermView = dynamic(() => import("./xterm-view"), { ssr: false });
 // Business パネルは 表面=opencode チャット / 裏面=BackTabsPanel (RAG/スキル/ヘルプ)。
-// Coding/Ubuntu パネルは従来どおり XtermView ベース。
+// Coding/Analyze は React チャット表面 + Bash/ヘルプ/スキル 裏面。
+// Ubuntu は従来どおり XtermView ベース。
 const OpencodeChat = dynamic(() => import("./opencode-chat"), { ssr: false });
 const CodingConsole = dynamic(() => import("./coding-console"), {
+  ssr: false,
+});
+const AnalysisConsole = dynamic(() => import("./analysis-console"), {
   ssr: false,
 });
 const BackTabsPanel = dynamic(() => import("./back-tabs-panel"), {
@@ -44,7 +48,7 @@ type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
 
 export type TerminalSession = { workspaceId: string; cwd: string; nonce: number };
-export type TerminalVariant = "coding" | "business" | "ubuntu";
+export type TerminalVariant = "coding" | "business" | "ubuntu" | "analyze";
 
 type VariantStyle = {
   label: string;
@@ -83,6 +87,14 @@ const VARIANT_STYLES: Record<TerminalVariant, VariantStyle> = {
     panelBorder: "border border-white/10 shadow-black/50",
     panelBg: "#0b0b0f",
   },
+  analyze: {
+    label: "opencode — analyze",
+    headerBg: "bg-[#1a1530]",
+    headerText: "text-white",
+    headerBorder: "border-white/10 border-t-2 border-t-violet-400",
+    panelBorder: "border border-white/10 shadow-black/50",
+    panelBg: "#100c1f",
+  },
 };
 
 const iconClass = { width: "1em", height: "1em" } as const;
@@ -116,16 +128,22 @@ const businessTabs: BackTab[] = [
 // で描画される。よってビューポート中心 (window.innerWidth/2, innerHeight/2) に
 // パネル中央が来るように逆算すると:
 //   scenePos.x = (innerWidth/2) / view.zoom - sceneSize.w/2 - view.x
-// 3 つ同時に開いた時に完全重複しないよう、slot 別に少しだけオフセットする
-// (シーン座標での値なので zoom 不変)。
+// 4 つ同時に開いた時に完全重複しないよう、variant 別に少しだけオフセットする
+// (シーン座標での値なので zoom 不変)。Analyze は Business と同 slot="right" を共有する
+// ため、variant ごとに別オフセットを与えて初回マウント位置をずらす。
 function defaultScenePos(
   slot: "left" | "center" | "right",
+  variant: TerminalVariant,
   view: View,
   size: { w: number; h: number },
 ): { x: number; y: number } {
   if (typeof window === "undefined") return { x: 0, y: 0 };
   const baseX = window.innerWidth / 2 / view.zoom - size.w / 2 - view.x;
   const baseY = window.innerHeight / 2 / view.zoom - size.h / 2 - view.y;
+  // Analyze は Business と slot="right" を共有するので、初期位置だけ更に右下にずらす
+  if (variant === "analyze") {
+    return { x: baseX + 120, y: baseY + 60 };
+  }
   const dx = slot === "left" ? -40 : slot === "right" ? 40 : 0;
   const dy = slot === "left" ? -20 : slot === "right" ? 20 : 0;
   return { x: baseX + dx, y: baseY + dy };
@@ -154,7 +172,7 @@ export default function FloatingTerminal({
 
   // マウント時の view を一度だけ参照して中心位置を決定。以降ユーザがドラッグで自由に動かせる。
   const [scenePos, setScenePos] = useState<ScenePos>(() =>
-    defaultScenePos(slot, view, { w: 720, h: 440 }),
+    defaultScenePos(slot, variant, view, { w: 720, h: 440 }),
   );
   const [sceneSize, setSceneSize] = useState<SceneSize>({ w: 720, h: 440 });
   const [minimized, setMinimized] = useState(false);
@@ -220,14 +238,16 @@ export default function FloatingTerminal({
   const top = (scenePos.y + view.y) * view.zoom;
 
   // variant ごとの表裏:
-  // - coding: 表面 = opencode チャット UI (React), 裏面 = shell (xterm) ※PR 3 で 3 タブ化予定
+  // - coding: 表面 = opencode チャット UI (React), 裏面 = Bash / ヘルプ / スキル
   // - business: 表面 = opencode チャット UI (React), 裏面 = BackTabsPanel (RAG/スキル/ヘルプ)
+  // - analyze: 表面 = AnalysisConsole (React), 裏面 = Bash / ヘルプ / スキル (coding を流用)
   // - ubuntu: 表面 = shell (xterm), 裏面なし
   const frontCmd: "opencode" | "shell" = variant === "ubuntu" ? "shell" : "opencode";
   const backAvailable = variant !== "ubuntu";
   const isBusiness = variant === "business";
-  // 表面が React チャット (OpencodeChat) のパネル。Coding と Business が該当。
-  const isChatFront = variant === "business" || variant === "coding";
+  // 表面が React チャット (OpencodeChat / CodingConsole / AnalysisConsole) のパネル。
+  const isChatFront =
+    variant === "business" || variant === "coding" || variant === "analyze";
 
   // Coding 裏面タブ構成。session と backNonce に依存するため関数内で組む。
   // Bash タブの pty は「フリップ済み (backNonce > 0) かつ Bash タブ active」
@@ -402,8 +422,10 @@ export default function FloatingTerminal({
               {isChatFront ? (
                 variant === "coding" ? (
                   <CodingConsole fontSize={fontSize} />
+                ) : variant === "analyze" ? (
+                  <AnalysisConsole fontSize={fontSize} />
                 ) : (
-                  <OpencodeChat fontSize={fontSize} variant={variant} />
+                  <OpencodeChat fontSize={fontSize} variant="business" />
                 )
               ) : session ? (
                 <XtermView
