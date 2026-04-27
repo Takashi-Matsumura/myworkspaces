@@ -531,13 +531,14 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
         </div>
       </main>
 
-      {/* 進捗サマリ (ステップ進行 + 現在実行中 tool) */}
+      {/* 進捗サマリ (ステップ進行 + 現在実行中 tool + web_search 残数バッジ) */}
       <ProgressPane
         messages={messages}
         parts={state.parts}
         busy={busy}
         activeId={activeId}
         theme={theme}
+        showWebSearchBadge
       />
 
       {/* 下部固定コンポーザ */}

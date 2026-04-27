@@ -23,15 +23,19 @@ export const dynamic = "force-dynamic";
 //   (Stage 3)。plan は edit を `.opencode/plans/*.md` のみに制限する組み込み設定が
 //   あるので、計画文書だけを書かせる用途に使える
 const CODING_PREFIX =
-  "[coding-rules.md に従って作業すること。ファイルは write/edit ツールを実際に呼んで書き込み、最後に bash で動作確認を行うまで完了宣言しない]\n\n";
+  "[coding-rules.md に従って作業すること。ファイルは write/edit ツールを実際に呼んで書き込み、最後に bash で動作確認を行うまで完了宣言しない。" +
+  "ライブラリの最新仕様や公式ドキュメントが必要な時は web_search ツールを使ってよい (推測で API 仕様を書くのは禁止)]\n\n";
 
 const ANALYZE_PREFIXES: Record<"survey" | "detail" | "port", string> = {
   survey:
-    "[analyze-rules.md に従って repo 構造把握フェーズで動くこと。bash と read を中心に使い、出力は docs/analysis/00-overview.md。実装ファイルは write/edit で書き換えない]\n\n",
+    "[analyze-rules.md に従って repo 構造把握フェーズで動くこと。bash と read を中心に使い、出力は docs/analysis/00-overview.md。実装ファイルは write/edit で書き換えない。" +
+    "使われている技術スタック / フレームワークの一般情報が必要な時は web_search ツールを使ってよい]\n\n",
   detail:
-    "[analyze-rules.md に従って詳細分析フェーズで動くこと。クラス・関数・API・データモデルを docs/analysis/ 配下の連番 .md (10-modules.md / 20-api.md / 30-data-model.md など) に書き出すこと。各記述に出典 (path:line) を併記。実装ファイルは write/edit で書き換えない]\n\n",
+    "[analyze-rules.md に従って詳細分析フェーズで動くこと。クラス・関数・API・データモデルを docs/analysis/ 配下の連番 .md (10-modules.md / 20-api.md / 30-data-model.md など) に書き出すこと。各記述に出典 (path:line) を併記。実装ファイルは write/edit で書き換えない。" +
+    "外部ライブラリの公式仕様確認に web_search ツールを使ってよいが、レポート本文は repo 内の出典を優先する]\n\n",
   port:
-    "[analyze-rules.md に従って移植ガイドフェーズで動くこと。docs/analysis/ 配下の既存資料 (00-overview.md / 10-modules.md / 20-api.md / 30-data-model.md など) を read で読み込み、別言語の再実装エージェント向けの引き継ぎ書 docs/analysis/90-porting-guide.md を生成する。実装ファイルは write/edit で書き換えない]\n\n",
+    "[analyze-rules.md に従って移植ガイドフェーズで動くこと。docs/analysis/ 配下の既存資料 (00-overview.md / 10-modules.md / 20-api.md / 30-data-model.md など) を read で読み込み、別言語の再実装エージェント向けの引き継ぎ書 docs/analysis/90-porting-guide.md を生成する。実装ファイルは write/edit で書き換えない。" +
+    "移植先言語の同等ライブラリ調査に web_search ツールを使ってよい]\n\n",
 };
 
 // Biz パネルのフェーズ別 prefix。
