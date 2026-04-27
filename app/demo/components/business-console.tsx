@@ -1,11 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -19,6 +14,7 @@ import {
   Search,
   Layers,
   Database,
+  Printer,
 } from "lucide-react";
 import {
   useOpencodeStream,
@@ -37,9 +33,9 @@ import { ReasoningPart } from "./chat/chat-reasoning";
 import { InlineComposer, type InlineComposerHandle } from "./chat/chat-composer";
 import { useChatScrollAndFocus } from "./chat/use-chat-scroll-focus";
 import { GeneratingIndicator } from "./chat/generating-indicator";
-import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
+import { BizMarkdown } from "./biz-markdown";
 
 // Biz パネルのフェーズ。route.ts の BIZ_PREFIXES と対応。
 type BizPhase = "data" | "doc" | "web" | "synth";
@@ -452,6 +448,40 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
     return out;
   }, [messages]);
 
+  // Phase E-C-1: 最新 assistant メッセージで言及された reports/*.md と research/*.md の
+  // 相対パス候補を抽出。各候補は /biz/preview の新規タブで開ける。同じパスは 1 回のみ。
+  const reportPaths = useMemo<string[]>(() => {
+    let latestAssistant: typeof messages[number] | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role !== "user") {
+        latestAssistant = messages[i];
+        break;
+      }
+    }
+    if (!latestAssistant) return [];
+    const seen = new Set<string>();
+    const re = /\b(reports|research)\/[A-Za-z0-9_./-]+?\.md\b/g;
+    for (const pid of latestAssistant.partIds) {
+      const t = state.parts[pid]?.text;
+      if (!t) continue;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(t)) !== null) {
+        seen.add(m[0]);
+      }
+    }
+    return Array.from(seen);
+  }, [messages, state.parts]);
+
+  const openPreview = useCallback(
+    (relativePath: string) => {
+      if (!activeWorkspaceId) return;
+      const abs = `/root/workspaces/${activeWorkspaceId}/${relativePath}`;
+      const url = `/biz/preview?workspaceId=${encodeURIComponent(activeWorkspaceId)}&path=${encodeURIComponent(abs)}`;
+      if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+    },
+    [activeWorkspaceId],
+  );
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<InlineComposerHandle>(null);
   const totalChars = useMemo(
@@ -661,6 +691,34 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
       <div
         className={`flex-none border-t ${theme.headerBorder} ${theme.headerBg} px-3 py-2`}
       >
+        {/* Phase E-C-1: 最新 assistant メッセージで言及された reports/*.md と research/*.md を
+            印刷プレビュー (/biz/preview) で開けるショートカット。 */}
+        {reportPaths.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-1">
+            <span className={theme.phaseLabel} style={{ fontSize: "0.7em" }}>
+              <Printer
+                className="mr-0.5 inline-block align-[-0.15em]"
+                style={{ width: "1em", height: "1em" }}
+              />
+              印刷プレビュー:
+            </span>
+            {reportPaths.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => openPreview(p)}
+                disabled={!activeWorkspaceId}
+                title={`${p} を新規タブで開いて Cmd+P で PDF 化`}
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors disabled:opacity-40 ${theme.templateBtn}`}
+                style={{ fontSize: "0.75em" }}
+              >
+                <FileText className="h-3 w-3" />
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* フェーズ切替 (route.ts の BIZ_PREFIXES と対応) */}
         <div className="mb-2 flex items-center gap-2">
           <span className={theme.phaseLabel} style={{ fontSize: "0.7em" }}>
@@ -788,41 +846,13 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
 }
 
 // Biz 用 MessagePart: reasoning / text / その他で振り分け。
-// テーマは business 専用 (白地 + emerald)。
+// text は biz-markdown の BizMarkdown コンポーネント (Phase E-C-1 で /biz/preview と共通化)。
 function MessagePartBiz({ part }: { part: PartInfo }) {
   if (part.type === "reasoning") {
     return <ReasoningPart part={part} theme={CHAT_THEMES.business} />;
   }
   if (part.type === "text") {
-    return (
-      <div
-        className="prose max-w-none"
-        style={{ fontSize: "inherit", lineHeight: 1.55 }}
-      >
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeKatex]}
-          components={{
-            pre: ({ children }) => <>{children}</>,
-            code: (props) => {
-              const { className, children } = props as {
-                className?: string;
-                children?: React.ReactNode;
-                inline?: boolean;
-              };
-              const lang = /language-(\w+)/.exec(className ?? "")?.[1];
-              const text = String(children ?? "");
-              if (lang) {
-                return <CodeBlock language={lang} code={text} />;
-              }
-              return <code className={className}>{children}</code>;
-            },
-          }}
-        >
-          {part.text}
-        </ReactMarkdown>
-      </div>
-    );
+    return <BizMarkdown source={part.text} />;
   }
   return <PartAsCard part={part} />;
 }
