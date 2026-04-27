@@ -15,6 +15,7 @@ import {
   Layers,
   Database,
   Printer,
+  Share2,
 } from "lucide-react";
 import {
   useOpencodeStream,
@@ -482,6 +483,56 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
     [activeWorkspaceId],
   );
 
+  // Phase E-C-3: 共有 URL 発行 (期限は window.confirm でユーザに選ばせる簡易 UI)。
+  // 既存があれば token は維持、expiresAt のみ更新される。
+  const issueShareLink = useCallback(
+    async (relativePath: string) => {
+      if (!activeWorkspaceId) return;
+      const ans = window.prompt(
+        `「${relativePath}」の共有 URL を発行します。\n期限を入力してください: 7d / 30d / never`,
+        "7d",
+      );
+      if (ans === null) return; // キャンセル
+      const expiry = ans.trim().toLowerCase();
+      if (expiry !== "7d" && expiry !== "30d" && expiry !== "never") {
+        window.alert("期限は 7d / 30d / never のいずれかで指定してください。");
+        return;
+      }
+      try {
+        const resp = await fetch("/api/biz/share", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: activeWorkspaceId,
+            relativePath,
+            expiry,
+          }),
+        });
+        if (!resp.ok) {
+          const errBody = (await resp.json().catch(() => ({}))) as { error?: string };
+          window.alert(`共有 URL の発行に失敗しました: ${errBody.error ?? `HTTP ${resp.status}`}`);
+          return;
+        }
+        const json = (await resp.json()) as { token?: string };
+        if (!json.token) {
+          window.alert("共有 URL の発行に失敗しました: トークンが返却されませんでした");
+          return;
+        }
+        const url = `${window.location.origin}/share/${json.token}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          window.alert(`共有 URL をクリップボードにコピーしました:\n${url}`);
+        } catch {
+          // clipboard API が拒否されても URL は表示で伝える
+          window.prompt("共有 URL (Cmd+C でコピー):", url);
+        }
+      } catch (err) {
+        window.alert(`共有 URL の発行に失敗しました: ${(err as Error).message}`);
+      }
+    },
+    [activeWorkspaceId],
+  );
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<InlineComposerHandle>(null);
   const totalChars = useMemo(
@@ -692,29 +743,42 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
         className={`flex-none border-t ${theme.headerBorder} ${theme.headerBg} px-3 py-2`}
       >
         {/* Phase E-C-1: 最新 assistant メッセージで言及された reports/*.md と research/*.md を
-            印刷プレビュー (/biz/preview) で開けるショートカット。 */}
+            印刷プレビュー (/biz/preview) で開けるショートカット。
+            Phase E-C-3: 各行に「共有 URL 発行」ボタンを併設。 */}
         {reportPaths.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-1">
+          <div className="mb-2 flex flex-col gap-1">
             <span className={theme.phaseLabel} style={{ fontSize: "0.7em" }}>
               <Printer
                 className="mr-0.5 inline-block align-[-0.15em]"
                 style={{ width: "1em", height: "1em" }}
               />
-              印刷プレビュー:
+              印刷プレビュー / 共有:
             </span>
             {reportPaths.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => openPreview(p)}
-                disabled={!activeWorkspaceId}
-                title={`${p} を新規タブで開いて Cmd+P で PDF 化`}
-                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors disabled:opacity-40 ${theme.templateBtn}`}
-                style={{ fontSize: "0.75em" }}
-              >
-                <FileText className="h-3 w-3" />
-                {p}
-              </button>
+              <div key={p} className="flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => openPreview(p)}
+                  disabled={!activeWorkspaceId}
+                  title={`${p} を新規タブで開いて Cmd+P で PDF 化`}
+                  className={`inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors disabled:opacity-40 ${theme.templateBtn}`}
+                  style={{ fontSize: "0.75em" }}
+                >
+                  <FileText className="h-3 w-3" />
+                  {p}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void issueShareLink(p)}
+                  disabled={!activeWorkspaceId}
+                  title={`${p} の共有 URL を発行 (Cookie 不要で公開閲覧可能)`}
+                  className={`inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors disabled:opacity-40 ${theme.templateBtn}`}
+                  style={{ fontSize: "0.75em" }}
+                >
+                  <Share2 className="h-3 w-3" />
+                  共有 URL
+                </button>
+              </div>
             ))}
           </div>
         )}

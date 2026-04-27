@@ -23,6 +23,7 @@ model User {
   sessions        Session[]
   whiteboard      Whiteboard?
   ragDocuments    RagDocument[]
+  shareLinks      ShareLink[]
 }
 
 model Session {
@@ -85,4 +86,26 @@ model RagDocument {
   @@unique([userId, workspaceId, relativePath], name: "uniq_user_workspace_path")
   @@index([userId])
   @@index([userId, updatedAt])
+}
+
+// Phase E-C-3: 署名付き共有 URL。
+// reports/<topic>-summary.md などを Cookie 認証なしで公開閲覧できるトークンを発行する。
+// /share/<token> で /biz/preview と同じ render を no-auth で表示。
+//
+// 同一 (userId, workspaceId, relativePath) は upsert (= URL を再発行しても token は維持)。
+// expiresAt が NULL なら無期限。クライアント側で期限切れは 410 Gone で表示する。
+model ShareLink {
+  id           String    @id @default(cuid())
+  token        String    @unique
+  userId       String
+  workspaceId  String
+  relativePath String
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId, relativePath], name: "uniq_share_user_workspace_path")
+  @@index([userId])
+  @@index([token])
 }
