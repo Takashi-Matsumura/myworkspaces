@@ -13,6 +13,7 @@ import {
   Wand2,
   HelpCircle,
   TerminalSquare,
+  BookOpen,
 } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 import type { BackTab } from "./back-tabs-panel";
@@ -44,6 +45,11 @@ const OpencodeSkills = dynamic(() => import("./opencode-skills"), {
 });
 const BusinessHelp = dynamic(() => import("./business-help"), { ssr: false });
 const CodingHelp = dynamic(() => import("./coding-help"), { ssr: false });
+const AnalysisHelp = dynamic(() => import("./analysis-help"), { ssr: false });
+const ShellHelp = dynamic(() => import("./shell-help"), { ssr: false });
+const ShellCheatsheet = dynamic(() => import("./shell-cheatsheet"), {
+  ssr: false,
+});
 
 type ScenePos = { x: number; y: number };
 type SceneSize = { w: number; h: number };
@@ -120,6 +126,22 @@ const businessTabs: BackTab[] = [
     label: "ヘルプ",
     icon: <HelpCircle style={iconClass} />,
     render: ({ fontSize }) => <BusinessHelp fontSize={fontSize} />,
+  },
+];
+
+// Shell (ubuntu) パネル裏面のタブ。session に依存しないので module 定数で OK。
+const shellTabs: BackTab[] = [
+  {
+    key: "help",
+    label: "ヘルプ",
+    icon: <HelpCircle style={iconClass} />,
+    render: ({ fontSize }) => <ShellHelp fontSize={fontSize} />,
+  },
+  {
+    key: "cheatsheet",
+    label: "コマンド集",
+    icon: <BookOpen style={iconClass} />,
+    render: ({ fontSize }) => <ShellCheatsheet fontSize={fontSize} />,
   },
 ];
 
@@ -241,57 +263,62 @@ export default function FloatingTerminal({
   // variant ごとの表裏:
   // - coding: 表面 = opencode チャット UI (React), 裏面 = Bash / ヘルプ / スキル
   // - business: 表面 = opencode チャット UI (React), 裏面 = BackTabsPanel (RAG/スキル/ヘルプ)
-  // - analyze: 表面 = AnalysisConsole (React), 裏面 = Bash / ヘルプ / スキル (coding を流用)
-  // - ubuntu: 表面 = shell (xterm), 裏面なし
+  // - analyze: 表面 = AnalysisConsole (React), 裏面 = Bash / ヘルプ (Analyze 専用) / スキル
+  // - ubuntu: 表面 = shell (xterm), 裏面 = ヘルプ + コマンド集 (シェル/Git 入門)
   const frontCmd: "opencode" | "shell" = variant === "ubuntu" ? "shell" : "opencode";
-  const backAvailable = variant !== "ubuntu";
+  const backAvailable = true;
   const isBusiness = variant === "business";
+  const isUbuntu = variant === "ubuntu";
   // 表面が React チャット (OpencodeChat / CodingConsole / AnalysisConsole) のパネル。
   const isChatFront =
     variant === "business" || variant === "coding" || variant === "analyze";
 
-  // Coding 裏面タブ構成。session と backNonce に依存するため関数内で組む。
+  // Coding / Analyze 裏面タブ構成。session と backNonce に依存するため関数内で組む。
   // Bash タブの pty は「フリップ済み (backNonce > 0) かつ Bash タブ active」
   // のときだけマウントされる — 裏面を見てすらいないのに pty を張らないよう、
   // 初期 active は "help" に固定して、ユーザが Bash タブを押した瞬間起動する。
-  const codingTabs = useMemo<BackTab[]>(
-    () => [
-      {
-        key: "bash",
-        label: "Bash",
-        icon: <TerminalSquare style={iconClass} />,
-        render: ({ fontSize }) =>
-          backNonce > 0 && session ? (
-            <XtermView
-              key={`${backNonce}-${fontSize}-back`}
-              cwd={session.cwd}
-              cmd="shell"
-              fontSize={fontSize}
-              cursorStyle={cursorStyle}
-              scrollback={scrollback}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
-              シェル (bash) を起動するにはフリップしてください
-            </div>
+  // help タブの内容だけ Coding (CodingHelp) と Analyze (AnalysisHelp) で差し替える。
+  const codingLikeTabs = useMemo<BackTab[]>(
+    () => {
+      const HelpComponent = variant === "analyze" ? AnalysisHelp : CodingHelp;
+      return [
+        {
+          key: "bash",
+          label: "Bash",
+          icon: <TerminalSquare style={iconClass} />,
+          render: ({ fontSize }) =>
+            backNonce > 0 && session ? (
+              <XtermView
+                key={`${backNonce}-${fontSize}-back`}
+                cwd={session.cwd}
+                cmd="shell"
+                fontSize={fontSize}
+                cursorStyle={cursorStyle}
+                scrollback={scrollback}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-[#0b0b0f] px-6 text-center font-mono text-xs text-white/50">
+                シェル (bash) を起動するにはフリップしてください
+              </div>
+            ),
+        },
+        {
+          key: "help",
+          label: "ヘルプ",
+          icon: <HelpCircle style={iconClass} />,
+          render: ({ fontSize }) => <HelpComponent fontSize={fontSize} />,
+        },
+        {
+          key: "skills",
+          label: "スキル",
+          icon: <Wand2 style={iconClass} />,
+          render: ({ fontSize }) => (
+            <OpencodeSkills fontSize={fontSize} variant="coding" />
           ),
-      },
-      {
-        key: "help",
-        label: "ヘルプ",
-        icon: <HelpCircle style={iconClass} />,
-        render: ({ fontSize }) => <CodingHelp fontSize={fontSize} />,
-      },
-      {
-        key: "skills",
-        label: "スキル",
-        icon: <Wand2 style={iconClass} />,
-        render: ({ fontSize }) => (
-          <OpencodeSkills fontSize={fontSize} variant="coding" />
-        ),
-      },
-    ],
-    [backNonce, session],
+        },
+      ];
+    },
+    [backNonce, session, variant, cursorStyle, scrollback],
   );
 
   const headerBar = (title: string) => (
@@ -353,12 +380,16 @@ export default function FloatingTerminal({
             className="ml-1 rounded p-0.5 text-white hover:bg-white/10"
             title={
               flipped
-                ? variant === "business"
-                  ? "チャットに戻す"
-                  : "表面に戻す"
+                ? variant === "ubuntu"
+                  ? "シェルに戻す"
+                  : variant === "business"
+                    ? "チャットに戻す"
+                    : "表面に戻す"
                 : variant === "business"
                   ? "RAG / スキル / ヘルプを開く"
-                  : "シェルを開く"
+                  : variant === "ubuntu"
+                    ? "ヘルプ / コマンド集を開く"
+                    : "Bash / ヘルプ / スキルを開く"
             }
           >
             <ArrowUpDown className="h-3.5 w-3.5 rotate-90" />
@@ -455,8 +486,10 @@ export default function FloatingTerminal({
           )}
         </div>
 
-        {/* Back (ubuntu variant 以外)。
-            Business 裏面は RAG ドキュメント、Coding 裏面は shell (bash)。 */}
+        {/* Back: variant ごとに構成が違う。
+            - business: RAG / スキル / ヘルプ
+            - coding / analyze: Bash / ヘルプ / スキル
+            - ubuntu: ヘルプのみ (タブバーなし) */}
         {backAvailable && (
           <div
             className={`flex flex-col rounded-lg shadow-2xl backdrop-blur ${style.panelBorder}`}
@@ -471,7 +504,9 @@ export default function FloatingTerminal({
             {headerBar(
               isBusiness
                 ? `${style.label} — RAG / スキル / ヘルプ`
-                : `${style.label} — Bash / ヘルプ / スキル`,
+                : isUbuntu
+                  ? `${style.label} — ヘルプ / コマンド集`
+                  : `${style.label} — Bash / ヘルプ / スキル`,
             )}
             {!minimized && (
               <div
@@ -485,9 +520,16 @@ export default function FloatingTerminal({
                     variant="business"
                     fontSize={fontSize}
                   />
+                ) : isUbuntu ? (
+                  <BackTabsPanel
+                    tabs={shellTabs}
+                    variant="coding"
+                    fontSize={fontSize}
+                    initialTab="help"
+                  />
                 ) : (
                   <BackTabsPanel
-                    tabs={codingTabs}
+                    tabs={codingLikeTabs}
                     variant="coding"
                     fontSize={fontSize}
                     initialTab="help"
