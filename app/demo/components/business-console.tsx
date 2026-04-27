@@ -625,13 +625,6 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
           </span>
         )}
         <span className="ml-auto flex items-center gap-2">
-          <span
-            className="hidden truncate rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700 sm:inline-block"
-            style={{ fontSize: "0.8em" }}
-            title={`${statusLine}\n\n応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差替。`}
-          >
-            {statusLine}
-          </span>
           <button
             type="button"
             onClick={() => void refreshSessions()}

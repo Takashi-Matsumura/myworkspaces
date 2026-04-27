@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Settings } from "lucide-react";
+import { CircleMinus, CirclePlus, Maximize2, Settings } from "lucide-react";
 import type { usePointerDrag } from "../hooks/use-pointer-drag";
 import { useWorkspace } from "./workspace-context";
 import type { ContainerInfo } from "./floating-workspace";
@@ -66,17 +66,17 @@ export function FloatingWorkspaceHeader({
         <span className="truncate font-mono text-[10px] text-slate-400">
           {workspace?.cwd ?? "(no workspace open)"}
         </span>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               changeFontSize(-1);
             }}
-            className="rounded px-1 text-[10px] text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
             title="文字サイズを下げる"
           >
-            A-
+            <CircleMinus className="h-4 w-4" />
           </button>
           <span className="min-w-[1.5rem] text-center font-mono text-[10px] text-slate-500">{fontSize}</span>
           <button
@@ -85,10 +85,10 @@ export function FloatingWorkspaceHeader({
               e.stopPropagation();
               changeFontSize(1);
             }}
-            className="rounded px-1 text-[10px] text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
             title="文字サイズを上げる"
           >
-            A+
+            <CirclePlus className="h-4 w-4" />
           </button>
         </div>
         <button

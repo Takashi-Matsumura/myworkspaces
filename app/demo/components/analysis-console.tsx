@@ -427,13 +427,6 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
           </span>
         )}
         <span className="ml-auto flex items-center gap-2">
-          <span
-            className={`hidden truncate rounded px-2 py-0.5 sm:inline-block ${ANALYSIS_THEME.headerStatBadge}`}
-            style={{ fontSize: "0.8em" }}
-            title={`${statusLine}\n\n応答中は文字ベースで推定 (~ 付き)、完了時に llama-server の /tokenize で実トークン数に差替。コンテキストはセッション全文のトークン数と上限の比。`}
-          >
-            {statusLine}
-          </span>
           <button
             type="button"
             onClick={() => void refreshSessions()}
@@ -547,7 +540,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
       >
         {/* 分析フェーズ切替 (route.ts の ANALYZE_PREFIXES と対応) */}
         <div className="mb-2 flex items-center gap-2">
-          <span className="text-[10px] text-white/40">フェーズ:</span>
+          <span className="text-[10px] text-white/70">フェーズ:</span>
           <div className="inline-flex overflow-hidden rounded border border-white/10">
             {MODE_BUTTONS.map((btn) => {
               const Icon = btn.icon;
@@ -562,7 +555,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
                   className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] transition-colors disabled:opacity-40 ${
                     active
                       ? "bg-violet-500/25 text-violet-200"
-                      : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                      : "text-white/85 hover:bg-white/5 hover:text-white"
                   }`}
                 >
                   <Icon className="h-3 w-3" />
@@ -575,7 +568,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
 
         {/* クイックテンプレート: 入力欄に分析手順の雛形を展開 */}
         <div className="mb-2 flex flex-wrap items-center gap-1">
-          <span className="text-[10px] text-white/40">テンプレ:</span>
+          <span className="text-[10px] text-white/70">テンプレ:</span>
           {ANALYZE_TEMPLATES.map((tpl) => {
             const Icon = tpl.icon;
             return (
@@ -585,7 +578,7 @@ export default function AnalysisConsole({ fontSize = 13 }: { fontSize?: number }
                 onClick={() => applyTemplate(tpl.template)}
                 disabled={sending || !activeId}
                 title={`${tpl.label}テンプレを入力欄に展開`}
-                className="inline-flex items-center gap-1 rounded border border-white/10 px-2 py-0.5 text-[11px] text-white/70 transition-colors hover:bg-white/5 hover:text-white/90 disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded border border-white/10 px-2 py-0.5 text-[11px] text-white/90 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40"
               >
                 <Icon className="h-3 w-3" />
                 {tpl.label}

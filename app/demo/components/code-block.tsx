@@ -48,7 +48,7 @@ export function CodeBlock({
           <button
             type="button"
             onClick={onCopy}
-            className="absolute right-1.5 top-1.5 rounded border border-white/10 bg-white/5 p-1 text-white/60 opacity-0 transition-opacity hover:bg-white/10 hover:text-white/90 focus-visible:opacity-100 group-hover:opacity-100"
+            className="absolute right-1.5 top-1.5 rounded border border-white/10 bg-white/5 p-1 text-white/85 opacity-0 transition-opacity hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
             title={copied ? "コピーしました" : "コピー"}
             aria-label="コードをコピー"
           >
