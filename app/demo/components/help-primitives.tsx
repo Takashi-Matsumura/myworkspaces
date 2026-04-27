@@ -6,7 +6,7 @@ import { createContext, useContext } from "react";
 // Section / Subsection / Faq / Kbd は HelpRoot で包んだ variant を内部で参照する
 // (各所で variant を渡さないで済むよう Context 経由)。
 
-export type HelpVariant = "light" | "dark";
+export type HelpVariant = "light" | "dark" | "dark-violet" | "dark-indigo";
 
 type HelpTheme = {
   rootBg: string;
@@ -39,6 +39,30 @@ const HELP_THEMES: Record<HelpVariant, HelpTheme> = {
     rootText: "text-white/85",
     sectionBorder: "border-emerald-500/30",
     sectionTitle: "text-emerald-300",
+    subsectionTitle: "text-white/90",
+    faqBorder: "border border-white/10 bg-white/5",
+    faqSummary: "text-white/90 hover:bg-white/10",
+    faqBodyBorder: "border-t border-white/10",
+    faqBodyText: "text-white/70",
+    kbd: "border border-white/20 bg-white/10 text-white/80",
+  },
+  "dark-violet": {
+    rootBg: "bg-[#100c1f]",
+    rootText: "text-white/85",
+    sectionBorder: "border-violet-500/30",
+    sectionTitle: "text-violet-300",
+    subsectionTitle: "text-white/90",
+    faqBorder: "border border-white/10 bg-white/5",
+    faqSummary: "text-white/90 hover:bg-white/10",
+    faqBodyBorder: "border-t border-white/10",
+    faqBodyText: "text-white/70",
+    kbd: "border border-white/20 bg-white/10 text-white/80",
+  },
+  "dark-indigo": {
+    rootBg: "bg-[#0b0b0f]",
+    rootText: "text-white/85",
+    sectionBorder: "border-indigo-400/30",
+    sectionTitle: "text-indigo-300",
     subsectionTitle: "text-white/90",
     faqBorder: "border border-white/10 bg-white/5",
     faqSummary: "text-white/90 hover:bg-white/10",
