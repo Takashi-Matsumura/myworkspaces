@@ -1,23 +1,42 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
-// Phase E-A: Biz パネル周りのユニットテスト/インテグレーションテスト基盤。
-// 現状は lib/biz/* と app/api/biz/* を主対象とする。Next.js コンポーネント
-// (React 19 + RSC) は jsdom セットアップが大掛かりなので Phase E-A の範囲外。
+// Phase E-A / F-F: Biz パネル周りのユニット / インテグレーションテスト基盤。
 //
-// node 環境で実行: search-cache / search-provider / web-search route は
-// すべて Node-only のロジック。
+// Vitest の "projects" でテストを 2 系統に分ける:
+//   - node 環境: lib/biz/* + app/api/* (純粋ロジック / API route)
+//   - jsdom 環境: app/demo/components/* + app/biz/* (React コンポーネント)
+//
+// node 系は dotenv / Prisma / fetch が絡むので環境を汚さない isolate モード、
+// jsdom 系は React / DOM API + @testing-library が要るので別プロジェクト。
 export default defineConfig({
-  test: {
-    environment: "node",
-    include: ["tests/**/*.test.ts"],
-    globals: false,
-    // Next.js の dev サーバや prisma の初期化と衝突しないよう、テストは独立プロセス
-    isolate: true,
-  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
     },
+  },
+  test: {
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["tests/biz/**/*.test.ts", "tests/api/**/*.test.ts"],
+          isolate: true,
+          globals: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "jsdom",
+          environment: "jsdom",
+          include: ["tests/components/**/*.test.{ts,tsx}"],
+          setupFiles: ["./tests/setup-rtl.ts"],
+          globals: false,
+        },
+      },
+    ],
   },
 });
