@@ -10,6 +10,7 @@ import {
   Save,
   Check,
   ShieldCheck,
+  Briefcase,
 } from "lucide-react";
 import { useSettingsLoader } from "./settings/use-settings-loader";
 import { OpencodeTab } from "./settings/opencode-tab";
@@ -17,14 +18,16 @@ import { AppearanceTab } from "./settings/appearance-tab";
 import { NetworkTab } from "./settings/network-tab";
 import { ContainerTab } from "./settings/container-tab";
 import { InfoTab } from "./settings/info-tab";
+import { BizTab } from "./settings/biz-tab";
 
-type TabKey = "opencode" | "appearance" | "network" | "container" | "info";
+type TabKey = "opencode" | "appearance" | "network" | "container" | "biz" | "info";
 
 const TABS: { key: TabKey; label: string; icon: typeof Sliders }[] = [
   { key: "opencode", label: "OpenCode", icon: Sliders },
   { key: "appearance", label: "外観", icon: Palette },
   { key: "network", label: "ネットワーク", icon: ShieldCheck },
   { key: "container", label: "コンテナ", icon: ContainerIcon },
+  { key: "biz", label: "Biz", icon: Briefcase },
   { key: "info", label: "情報", icon: Info },
 ];
 
@@ -47,6 +50,8 @@ export default function SettingsPanel({
     networkBusy,
     rulesSyncing,
     rulesSyncResult,
+    bizUsage,
+    bizUsageLoading,
     setSettings,
     setDirty,
     setApiKeyVisible,
@@ -58,6 +63,7 @@ export default function SettingsPanel({
     save,
     syncAllRules,
     handleReset,
+    loadBizUsage,
   } = useSettingsLoader({ onResetContainer });
 
   if (!settings) {
@@ -133,6 +139,14 @@ export default function SettingsPanel({
             containerBusy={containerBusy}
             loadContainer={() => void loadContainer()}
             handleReset={() => void handleReset()}
+          />
+        )}
+
+        {tab === "biz" && (
+          <BizTab
+            bizUsage={bizUsage}
+            bizUsageLoading={bizUsageLoading}
+            loadBizUsage={() => void loadBizUsage()}
           />
         )}
 

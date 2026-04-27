@@ -4,11 +4,23 @@ import { useCallback, useEffect, useState } from "react";
 import { useMount } from "../../hooks/use-mount";
 import {
   ApiErrorSchema,
+  BizUsageSchema,
   ContainerStatusSchema,
   NetworkStatusSchema,
   SettingsResponseSchema,
   WorkspaceMinimalListSchema,
 } from "@/lib/api-schemas";
+
+export type BizUsage = {
+  provider: string;
+  monthKey: string;
+  monthCount: number;
+  sessionCount: number;
+  cacheHitCount: number;
+  cacheSize: number;
+  lastErrorAt: number | null;
+  lastError: string | null;
+};
 
 export type Provider = "llama-server" | "anthropic" | "openai";
 export type CursorStyle = "bar" | "block" | "underline";
@@ -72,6 +84,22 @@ export function useSettingsLoader({
 
   const [rulesSyncing, setRulesSyncing] = useState(false);
   const [rulesSyncResult, setRulesSyncResult] = useState<string | null>(null);
+
+  const [bizUsage, setBizUsage] = useState<BizUsage | null>(null);
+  const [bizUsageLoading, setBizUsageLoading] = useState(false);
+
+  const loadBizUsage = useCallback(async () => {
+    setBizUsageLoading(true);
+    try {
+      const res = await fetch("/api/biz/usage", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setBizUsage(BizUsageSchema.parse(await res.json()));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBizUsageLoading(false);
+    }
+  }, []);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -145,6 +173,7 @@ export function useSettingsLoader({
     void loadSettings();
     void loadContainer();
     void loadNetwork();
+    void loadBizUsage();
   });
 
   useEffect(() => {
@@ -252,6 +281,8 @@ export function useSettingsLoader({
     networkBusy,
     rulesSyncing,
     rulesSyncResult,
+    bizUsage,
+    bizUsageLoading,
     // 状態 (write)
     setSettings,
     setDirty,
@@ -265,5 +296,6 @@ export function useSettingsLoader({
     save,
     syncAllRules,
     handleReset,
+    loadBizUsage,
   };
 }

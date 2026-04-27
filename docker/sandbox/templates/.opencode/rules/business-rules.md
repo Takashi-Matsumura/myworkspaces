@@ -88,6 +88,27 @@ Biz パネルの全フェーズで、実装ファイル (`.ts/.tsx/.py/.java/.cs
 - `TAVILY_API_KEY is not set` → 同上
 - HTTP 5xx → 一度だけリトライ。それでも失敗したら「未確認」として記録
 
+### Tool 呼び出しの形式 (重要)
+
+**禁止**: 「web_search を実行します」「次に検索します」のような **文字列ナレーション**。
+これらはツール呼び出しと見なされない。Web フェーズではナレーションを書く前に、
+必ず実際のツール呼び出しを行うこと。
+
+**正しい例 1**: 検索
+
+\`\`\`json
+{"tool": "web_search", "input": {"query": "生成AI 国内市場規模 2025", "max_results": 5}}
+\`\`\`
+
+**正しい例 2**: 上位ヒットの本文取得
+
+\`\`\`json
+{"tool": "web_search", "input": {"read_url": "https://example.go.jp/release/20250320.html"}}
+\`\`\`
+
+Web フェーズに入ったら、最初の発話より前に **必ず web_search を 1 回呼ぶ**。
+要約や考察はツール結果が返ってきてから書くこと。
+
 ## Excel / CSV 補足
 
 1. 必ず `read_excel` を使う。`read` での読み込みは禁止

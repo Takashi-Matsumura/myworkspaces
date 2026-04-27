@@ -34,19 +34,25 @@ const ANALYZE_PREFIXES: Record<"survey" | "detail" | "port", string> = {
     "[analyze-rules.md に従って移植ガイドフェーズで動くこと。docs/analysis/ 配下の既存資料 (00-overview.md / 10-modules.md / 20-api.md / 30-data-model.md など) を read で読み込み、別言語の再実装エージェント向けの引き継ぎ書 docs/analysis/90-porting-guide.md を生成する。実装ファイルは write/edit で書き換えない]\n\n",
 };
 
-// Biz パネルのフェーズ別 prefix。Web フェーズの web_search は Phase B で実装予定。
+// Biz パネルのフェーズ別 prefix。
+//
+// Web フェーズには「最初に必ず web_search を 1 回呼ぶ」ナッジを入れている (Phase D-A)。
+// Gemma 4 e4b は tool_call を文字列ナレーション ("〜を検索します") で済ませがちなので、
+// プロンプト側で強制トリガをかけることでツール実行率を上げる狙い。
 const BIZ_PREFIXES: Record<"data" | "doc" | "web" | "synth", string> = {
   data:
     "[business-rules.md に従って Data フェーズで動作すること。@inputs/ 配下の CSV/XLSX を read_excel で読み、reports/data-<topic>.md にサマリと KPI 表を書く。実装ファイルは write/edit で書き換えない]\n\n",
   doc:
     "[business-rules.md に従って Doc フェーズで動作すること。@inputs/ 配下の PDF を read_pdf、画像を describe_image で読み、reports/doc-<topic>.md に要約と引用 (page) を書く。実装ファイルは write/edit で書き換えない]\n\n",
   web:
-    "[business-rules.md に従って Web フェーズで動作すること。web_search ツールで多段検索し research/<slug>.md に引用 URL を蓄積する (1 ターン最大 5 クエリ、本文取得は 2 件まで、引用 3 件以上必須)。実装ファイルは write/edit で書き換えない]\n\n",
+    "[business-rules.md に従って Web フェーズで動作すること。web_search ツールで多段検索し research/<slug>.md に引用 URL を蓄積する (1 ターン最大 5 クエリ、本文取得は 2 件まで、引用 3 件以上必須)。実装ファイルは write/edit で書き換えない。" +
+    "**最初の発話より前に必ず web_search を 1 回呼ぶこと。** ナレーション (「検索します」等) だけで終わらせるのは禁止。" +
+    "ツール呼び出しの形式は business-rules.md の「Tool 呼び出しの形式」セクションを参照]\n\n",
   synth:
     "[business-rules.md に従って Synthesize フェーズで動作すること。reports/ と research/ 配下を read で読み、reports/<topic>-summary.md に Data/Doc/Web 三面ビューと統合インサイト・矛盾点を書く。実装ファイルは write/edit で書き換えない]\n\n",
 };
 
-const ALLOWED_AGENTS = new Set(["plan", "build"]);
+const ALLOWED_AGENTS = new Set(["plan", "build", "business"]);
 const ALLOWED_ANALYZE_MODES = new Set(["survey", "detail", "port"]);
 const ALLOWED_BIZ_PHASES = new Set(["data", "doc", "web", "synth"]);
 
@@ -93,6 +99,11 @@ function transformBody(raw: string): string {
           const prefix = BIZ_PREFIXES[phase];
           if (!first.text.startsWith(prefix)) {
             first.text = prefix + first.text;
+          }
+          // Phase D-A: business variant は専用 agent (temperature 0.1) に固定する。
+          // 呼び出し元が明示的に別 agent を指定していなければ business を当てる。
+          if (!body.agent) {
+            body.agent = "business";
           }
         }
       }

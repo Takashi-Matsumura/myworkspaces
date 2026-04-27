@@ -1,5 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getFallbackReader, getSearchProvider } from "@/lib/biz/search-provider";
+import {
+  cacheGet,
+  cacheSet,
+  recordApiCall,
+  recordCacheHit,
+  recordError,
+} from "@/lib/biz/search-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +16,9 @@ export const dynamic = "force-dynamic";
 // 認証は Cookie ではなく X-Biz-Tool-Token ヘッダ (== process.env.BIZ_TOOL_TOKEN)。
 // サイドカー作成時に lib/docker-session.ts から Env として注入されたトークンを
 // tool が fetch ヘッダに乗せる。
+//
+// Phase D-B で in-process 5 分キャッシュ + 利用回数カウンタを追加。
+// 同一クエリ / 同一 URL の重複呼び出しは API へ抜けず、カウンタは別管理する。
 //
 // body:
 //   { query: string, max_results?: number }   // 検索
@@ -65,18 +75,26 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    const cached = cacheGet(reader.name, "read", { read_url: body.read_url });
+    if (cached) {
+      recordCacheHit();
+      return NextResponse.json(cached);
+    }
     try {
       const result = await reader.read(body.read_url);
-      return NextResponse.json({
+      const payload = {
         provider: provider.name,
         reader: reader.name,
+        cached: false,
         ...result,
-      });
+      };
+      cacheSet(reader.name, "read", { read_url: body.read_url }, payload);
+      recordApiCall();
+      return NextResponse.json(payload);
     } catch (err) {
-      return NextResponse.json(
-        { error: (err as Error).message },
-        { status: 502 },
-      );
+      const message = (err as Error).message;
+      recordError(message);
+      return NextResponse.json({ error: message }, { status: 502 });
     }
   }
 
@@ -87,13 +105,21 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  const cacheBody = { query: body.query, max_results: body.max_results };
+  const cachedSearch = cacheGet(provider.name, "search", cacheBody);
+  if (cachedSearch) {
+    recordCacheHit();
+    return NextResponse.json(cachedSearch);
+  }
   try {
     const hits = await provider.search(body.query, body.max_results);
-    return NextResponse.json({ provider: provider.name, hits });
+    const payload = { provider: provider.name, cached: false, hits };
+    cacheSet(provider.name, "search", cacheBody, payload);
+    recordApiCall();
+    return NextResponse.json(payload);
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message },
-      { status: 502 },
-    );
+    const message = (err as Error).message;
+    recordError(message);
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

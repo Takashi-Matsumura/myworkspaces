@@ -83,7 +83,32 @@ const DEEP_SEARCH_BODY = `# Business DeepSearch スキル
 
 - 推測で数値・固有名詞を書く (検索で得られない場合は「未確認」)
 - 実装ファイル (\`.ts/.tsx/.py/.go\` 等) の \`write/edit\`
-- 同じ URL を複数回 \`read_url\` する (キャッシュなし、無駄な API 消費)
+- 同じ URL を複数回 \`read_url\` する (内部 API は 5 分間キャッシュするため無効でもあり、無駄な API 消費)
+- 「次に web_search を実行します」のような **ナレーションのみ** で済ませる (実際のツール呼び出し JSON を出力すること)
+
+## Tool 呼び出しの具体例 (few-shot)
+
+このスキルが起動したら、最初のターンで **必ず** 下記いずれかの形で web_search を発火させる。
+
+**例 A**: ユーザーの問い「2025 年の国内 AI 規制動向を調べて」
+
+\`\`\`json
+{"tool": "web_search", "input": {"query": "AI規制 日本 2025 ガイドライン", "max_results": 5}}
+\`\`\`
+
+ツール結果が返ってきたら、上位 1〜2 件を read_url で本文取得:
+
+\`\`\`json
+{"tool": "web_search", "input": {"read_url": "https://www.meti.go.jp/example/release.html"}}
+\`\`\`
+
+**例 B**: ユーザーの問い「<企業名> の最新の事業動向」
+
+\`\`\`json
+{"tool": "web_search", "input": {"query": "<企業名> 決算 2025 事業セグメント", "max_results": 5}}
+\`\`\`
+
+考察・要約は **ツール結果が返ってからのみ** 書くこと。検索結果が無いまま推測で本文を書くのは禁止。
 `;
 
 const REPORT_BODY = `# Business Synthesize レポートスキル

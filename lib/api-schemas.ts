@@ -109,6 +109,19 @@ export const SkillDetailSchema = z.object({
   body: z.string(),
 });
 
+// ===== Biz / DeepSearch Usage =====
+
+export const BizUsageSchema = z.object({
+  provider: z.string(),
+  monthKey: z.string(),
+  monthCount: z.number(),
+  sessionCount: z.number(),
+  cacheHitCount: z.number(),
+  cacheSize: z.number(),
+  lastErrorAt: z.number().nullable(),
+  lastError: z.string().nullable(),
+});
+
 // ===== OpenCode Sessions / Config =====
 
 export const SessionInfoSchema = z.object({

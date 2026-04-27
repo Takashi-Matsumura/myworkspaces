@@ -25,6 +25,10 @@
     "build": {
       "temperature": 0.2,
       "top_p": 0.9
+    },
+    "business": {
+      "temperature": 0.1,
+      "top_p": 0.9
     }
   }
 }
