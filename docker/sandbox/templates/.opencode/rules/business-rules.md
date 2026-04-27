@@ -11,6 +11,7 @@
 | `.csv` / `.xlsx` / `.xls` / `.xlsm` | `read_excel` | `read` で開く |
 | `.pdf` | `read_pdf` | `read` で開く |
 | `.png` / `.jpg` / `.jpeg` / `.webp` / `.gif` | `describe_image` | `read` で開く |
+| 過去レポート / 取り込み済みドキュメント | `recall_research` (RAG ベクトル検索) | `web_search` を先に呼ぶ |
 | 外部の最新情報 / 一次情報 | `web_search` (Tavily 経由で動作) | 推測で書く |
 
 詳細な使い方は `pdf-rules.md` / `vision-rules.md` を参照してください。Excel/CSV の使い方は本ファイル「Excel/CSV 補足」セクションを参照。
@@ -64,6 +65,27 @@ Synthesize フェーズの統合レポートは以下の章立てを基本に:
 ## 実装ファイル不可侵
 
 Biz パネルの全フェーズで、実装ファイル (`.ts/.tsx/.py/.java/.cs/.go` 等) を `write/edit` で書き換えることは禁止です。出力は必ず上記の `reports/` または `research/` 配下のみ。読み取りは自由ですが、書き込み対象を間違えないでください。
+
+## Recall + DeepSearch の順序 (Web / Synthesize フェーズ)
+
+外部調査をする前に **必ず `recall_research` を 1 回呼んで** 過去のレポートや取り込み済み
+ドキュメントに同じテーマの知見が無いか確認してください。
+
+- `recall_research(query)` → 過去レポート / RAG 取り込み済みドキュメントから top-K チャンク
+- 不足分があれば `web_search(query)` で新規情報を補完
+
+これにより:
+- 既存の調査が無駄にならない
+- Web 検索の課金 (Tavily 等) を抑制できる
+- 「前回はこうだったが今回は違う」のような差分インサイトが Synthesize で書ける
+
+`recall_research` で 0 件だった場合のみ「未取り込みの新規テーマ」と判断し、いきなり web_search に
+進んで構いません。
+
+### recall_research の引数
+
+- `query`: 検索クエリ (日本語可、具体的な固有名詞・年・主体を含めるとヒット率が上がる)
+- `top_k`: 返却チャンク数 (デフォルト 4、最大 16)
 
 ## DeepSearch 規律 (Web フェーズ)
 

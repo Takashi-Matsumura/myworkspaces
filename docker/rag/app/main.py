@@ -209,6 +209,75 @@ async def delete_document(doc_id: str) -> Dict[str, Any]:
 
 
 # ─────────────────────────────────────────────
+# Search (Phase E-B-1: opencode tool 用の明示検索)
+# ─────────────────────────────────────────────
+#
+# /v1/chat/completions は LLM 呼び出しに付随して暗黙的に top-K を system に注入する形
+# だが、それとは別に「LLM が自分で検索結果を取りに行く」ための tool 用エンドポイント。
+# Biz パネルの recall_research tool から /api/biz/internal/recall 経由で叩かれる。
+#
+# 引数:
+#   { "query": "...", "top_k"?: int (default RAG_TOP_K, max 16) }
+# 返り値:
+#   { "hits": [ {doc_id, filename, chunk_index, text, score}, ... ] }
+
+
+@app.post("/search")
+async def search_endpoint(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="invalid json")
+
+    query = body.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise HTTPException(status_code=400, detail="query (string) is required")
+
+    requested_k = body.get("top_k")
+    if isinstance(requested_k, int) and requested_k > 0:
+        top_k = min(requested_k, 16)
+    else:
+        top_k = TOP_K
+
+    try:
+        qdrant.get_collection(COLLECTION)
+    except (UnexpectedResponse, ValueError):
+        return JSONResponse({"hits": []})
+
+    try:
+        vectors = await embed_texts([query])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"embedding failed: {e}")
+    if not vectors:
+        return JSONResponse({"hits": []})
+
+    try:
+        hits = qdrant.search(
+            collection_name=COLLECTION,
+            query_vector=vectors[0],
+            limit=top_k,
+            with_payload=True,
+        )
+    except (UnexpectedResponse, ValueError) as e:
+        raise HTTPException(status_code=502, detail=f"qdrant search failed: {e}")
+
+    return JSONResponse(
+        {
+            "hits": [
+                {
+                    "doc_id": (h.payload or {}).get("doc_id"),
+                    "filename": (h.payload or {}).get("filename"),
+                    "chunk_index": (h.payload or {}).get("chunk_index"),
+                    "text": (h.payload or {}).get("text", ""),
+                    "score": h.score,
+                }
+                for h in hits
+            ]
+        }
+    )
+
+
+# ─────────────────────────────────────────────
 # Chat completions (RAG 注入 + stream パススルー)
 # ─────────────────────────────────────────────
 
