@@ -2,6 +2,12 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# UTF-8 ロケールを強制。素の ubuntu:24.04 は LANG 未設定 + LC_CTYPE=POSIX なので、
+# vim や cat で日本語が `~XX` に化ける / readline 検索が壊れる等の問題が起きる。
+# C.UTF-8 は ubuntu:24.04 にデフォルトで含まれており locale-gen 不要 (locale -a で確認済み)。
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
 # サンドボックス内で使う基本ツール一式。
 # - 開発用: vim / nano / git / less / curl / procps
 # - apt が `_apt` へ降格するのに必要: ca-certificates
