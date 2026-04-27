@@ -303,7 +303,7 @@ function BashCard({ parsed }: { parsed: ParsedTool }) {
     >
       {cmd && <CodeBlock language="bash" code={cmd} />}
       {parsed.output && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-white/70">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-white/90">
           {parsed.output}
         </pre>
       )}
@@ -340,7 +340,7 @@ function GenericToolCard({ parsed }: { parsed: ParsedTool }) {
       }
     >
       {body && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-white/70">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[0.85em] leading-relaxed text-white/90">
           {body}
         </pre>
       )}

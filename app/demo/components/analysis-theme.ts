@@ -14,17 +14,14 @@ export const ANALYSIS_THEME = {
   cardAccentEdit: "text-amber-400",
   cardAccentRun: "text-sky-400",
   cardAccentWrite: "text-violet-200",
-  cardAccentMisc: "text-white/50",
+  cardAccentMisc: "text-white/80",
 
   // step-start / step-finish のセパレータ
-  stepSeparator: "text-white/40",
+  stepSeparator: "text-white/70",
 
   // code-block.tsx の prism ラッパ
   codeBlockBg: "bg-[#100c1f]",
   codeBlockBorder: "border-white/10",
-
-  // ヘッダー右端のミニ統計バッジ
-  headerStatBadge: "bg-white/5 text-white/70 border border-white/10",
 
   // セッションドロワー (SessionList 本体は chat-theme.analyze を再利用)
   drawerBg: "bg-[#1a1530]",
