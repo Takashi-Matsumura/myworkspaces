@@ -1,6 +1,7 @@
 // Biz パネル DeepSearch のプロバイダ抽象化。
 //
 // Phase B で Tavily 単体実装。Phase C で Brave / Serper / JinaReader を追加。
+// Phase D-B で 501/502 の自動リトライ (1 回のみ) を全プロバイダに追加。
 // プロバイダは BIZ_SEARCH_PROVIDER env で切り替えられるが、search() / read() の
 // シグネチャは統一されているので opencode tool 側はプロバイダを意識しない。
 //
@@ -12,6 +13,23 @@
 // - Tavily: 専用 extract API を持つ (search と同じ API キーで OK)
 // - Brave / Serper: 検索のみ。本文取得は JinaReader にフォールバックする
 //   (BIZ_READER_PROVIDER=jina + JINA_API_KEY が必要、未設定なら read 不可)
+
+// 501/502 を 1 度だけリトライする fetch ラッパ。403/4xx は即時失敗 (権限/クエリ問題)。
+// 503 もインフラの一時障害として再試行対象に含める (Tavily で観測あり)。
+const RETRY_STATUSES = new Set([501, 502, 503]);
+const RETRY_BACKOFF_MS = 600;
+
+async function fetchWithRetry(
+  input: string | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const resp = await fetch(input, init);
+  if (resp.ok || !RETRY_STATUSES.has(resp.status)) return resp;
+  // 一度だけリトライ。レスポンス body を読まずに捨てて再投入。
+  await resp.body?.cancel().catch(() => {});
+  await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+  return fetch(input, init);
+}
 
 export type SearchHit = {
   title: string;
@@ -39,7 +57,7 @@ class TavilyProvider implements SearchProvider {
   constructor(private readonly apiKey: string) {}
 
   async search(query: string, maxResults = 5): Promise<SearchHit[]> {
-    const resp = await fetch("https://api.tavily.com/search", {
+    const resp = await fetchWithRetry("https://api.tavily.com/search", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -71,7 +89,7 @@ class TavilyProvider implements SearchProvider {
 
   async read(url: string): Promise<ReadResult> {
     // Tavily extract API。深い本文取得が必要な時用。
-    const resp = await fetch("https://api.tavily.com/extract", {
+    const resp = await fetchWithRetry("https://api.tavily.com/extract", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -104,7 +122,7 @@ class BraveProvider implements SearchProvider {
     const url = new URL("https://api.search.brave.com/res/v1/web/search");
     url.searchParams.set("q", query);
     url.searchParams.set("count", String(Math.max(1, Math.min(20, maxResults))));
-    const resp = await fetch(url, {
+    const resp = await fetchWithRetry(url, {
       headers: {
         accept: "application/json",
         "X-Subscription-Token": this.apiKey,
@@ -138,7 +156,7 @@ class SerperProvider implements SearchProvider {
   constructor(private readonly apiKey: string) {}
 
   async search(query: string, maxResults = 5): Promise<SearchHit[]> {
-    const resp = await fetch("https://google.serper.dev/search", {
+    const resp = await fetchWithRetry("https://google.serper.dev/search", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -187,7 +205,7 @@ class JinaReaderProvider implements SearchProvider {
 
   async read(url: string): Promise<ReadResult> {
     const target = `https://r.jina.ai/${url}`;
-    const resp = await fetch(target, {
+    const resp = await fetchWithRetry(target, {
       headers: {
         accept: "text/plain",
         ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
