@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { Database, RefreshCw } from "lucide-react";
 import type { BizUsage } from "./use-settings-loader";
 
 type Props = {
@@ -109,9 +109,57 @@ export function BizTab({ bizUsage, bizUsageLoading, loadBizUsage }: Props) {
         )}
       </div>
 
+      {bizUsage && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Database className="h-3.5 w-3.5 text-slate-500" />
+            <span className="text-xs font-medium text-slate-600">
+              RAG 取り込み状況
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 font-mono text-[11px] text-slate-700">
+            <div
+              className="flex flex-col items-center rounded border border-slate-200 bg-white px-2 py-1.5"
+              title="RagDocument テーブルの全レコード数 (手動アップロード分も含む)"
+            >
+              <span className="text-slate-400" style={{ fontSize: "9px" }}>
+                取り込み済み
+              </span>
+              <span className="text-base font-semibold tabular-nums">
+                {bizUsage.ragDocCount}
+              </span>
+            </div>
+            <div
+              className="flex flex-col items-center rounded border border-slate-200 bg-white px-2 py-1.5"
+              title="最後に ingest が完了した時刻 (RagDocument.updatedAt の最大値)"
+            >
+              <span className="text-slate-400" style={{ fontSize: "9px" }}>
+                最終 ingest
+              </span>
+              <span className="text-[11px] tabular-nums">
+                {bizUsage.ragLastIngestAt
+                  ? new Date(bizUsage.ragLastIngestAt).toLocaleString("ja-JP", {
+                      hour12: false,
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "—"}
+              </span>
+            </div>
+          </div>
+          <div className="mt-2 text-[10px] leading-relaxed text-slate-500">
+            Biz パネル下部の「RAG 同期」ボタンで <code>reports/</code> /
+            <code>research/</code> 配下を一括取り込みできます (recall_research が
+            検索対象に含めるため)。
+          </div>
+        </div>
+      )}
+
       <div className="rounded border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-800">
-        ⚠ 数値は dev サーバ プロセス内の自前カウンタです。Tavily 側の
-        ダッシュボード (<code>tavily.com</code>) で正確な月次クォータを
+        ⚠ DeepSearch の数値は dev サーバ プロセス内の自前カウンタです。Tavily
+        側のダッシュボード (<code>tavily.com</code>) で正確な月次クォータを
         確認してください。
       </div>
     </div>

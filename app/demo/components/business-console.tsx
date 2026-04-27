@@ -18,6 +18,7 @@ import {
   ClipboardList,
   Search,
   Layers,
+  Database,
 } from "lucide-react";
 import {
   useOpencodeStream,
@@ -25,7 +26,11 @@ import {
 } from "./use-opencode-stream";
 import { CHAT_THEMES } from "./chat-theme";
 import { useStreamStats } from "./use-stream-stats";
-import { SkillsResponseSchema, WorkspaceMinimalListSchema } from "@/lib/api-schemas";
+import {
+  SkillsResponseSchema,
+  SyncRagResponseSchema,
+  WorkspaceMinimalListSchema,
+} from "@/lib/api-schemas";
 import { expandSlashCommand, type SkillSummary } from "./opencode-chat";
 import { SessionList } from "./chat/session-list";
 import { ReasoningPart } from "./chat/chat-reasoning";
@@ -202,6 +207,10 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [syncRagBusy, setSyncRagBusy] = useState(false);
+  const [syncRagStatus, setSyncRagStatus] = useState<string | null>(null);
+  // Synthesize 送信時に自動で sync-rag を呼ぶフラグ。LocalStorage に保存しない (セッション内のみ)。
+  const [autoSyncOnSynthesize, setAutoSyncOnSynthesize] = useState(false);
 
   const loadSkills = useCallback(async () => {
     try {
@@ -279,11 +288,55 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
     void loadSkills();
   }, [loadSkills]);
 
+  const runSyncRag = useCallback(
+    async (silent = false): Promise<boolean> => {
+      if (!activeWorkspaceId) {
+        if (!silent) setSyncRagStatus("ワークスペース未確定です。少し待って再試行してください。");
+        return false;
+      }
+      setSyncRagBusy(true);
+      if (!silent) setSyncRagStatus("RAG 同期中…");
+      try {
+        const resp = await fetch("/api/biz/sync-rag", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ workspaceId: activeWorkspaceId }),
+        });
+        if (!resp.ok) {
+          const errBody = (await resp.json().catch(() => ({}))) as { error?: string };
+          setSyncRagStatus(`RAG 同期失敗: ${errBody.error ?? `HTTP ${resp.status}`}`);
+          return false;
+        }
+        const json = SyncRagResponseSchema.parse(await resp.json());
+        const total = json.synced.length + json.skipped.length + json.failed.length;
+        const newCount = json.synced.filter((s) => !s.updated).length;
+        const updCount = json.synced.length - newCount;
+        setSyncRagStatus(
+          total === 0
+            ? "RAG 同期: reports/ research/ に対象なし"
+            : `RAG 同期完了: 新規 ${newCount} / 更新 ${updCount} / スキップ ${json.skipped.length} / 失敗 ${json.failed.length}`,
+        );
+        if (!silent) setTimeout(() => setSyncRagStatus(null), 4000);
+        return json.failed.length === 0;
+      } catch (err) {
+        setSyncRagStatus(`RAG 同期失敗: ${(err as Error).message}`);
+        return false;
+      } finally {
+        setSyncRagBusy(false);
+      }
+    },
+    [activeWorkspaceId],
+  );
+
   const onSend = useCallback(async () => {
     const text = input.trim();
     if (!text || !activeId) return;
     setSending(true);
     try {
+      // Synthesize フェーズで autoSync が ON なら、送信前に同期を試みる。失敗しても送信は続ける。
+      if (phase === "synth" && autoSyncOnSynthesize) {
+        await runSyncRag(true);
+      }
       const expanded = expandSlashCommand(text, skills);
       const ok = await sendPrompt(activeId, expanded, {
         variant: "business",
@@ -293,7 +346,7 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
     } finally {
       setSending(false);
     }
-  }, [input, activeId, sendPrompt, skills, phase]);
+  }, [input, activeId, sendPrompt, skills, phase, autoSyncOnSynthesize, runSyncRag]);
 
   const applyTemplate = useCallback(
     (
@@ -665,6 +718,44 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
               </button>
             );
           })}
+        </div>
+
+        {/* RAG 同期: reports/ research/ を一括 ingest。Synthesize フェーズでは送信前自動同期トグルも出す。 */}
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void runSyncRag()}
+            disabled={syncRagBusy || !activeWorkspaceId}
+            title="reports/ と research/ 配下の Markdown を RAG (Qdrant) に取り込み、recall_research の検索対象にする"
+            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors disabled:opacity-40 ${theme.templateBtn}`}
+            style={{ fontSize: "0.75em" }}
+          >
+            <Database
+              className={`h-3 w-3 ${syncRagBusy ? "animate-pulse" : ""}`}
+            />
+            {syncRagBusy ? "RAG 同期中…" : "RAG 同期"}
+          </button>
+          {phase === "synth" && (
+            <label
+              className={`inline-flex items-center gap-1 ${theme.phaseLabel}`}
+              style={{ fontSize: "0.7em" }}
+              title="Synthesize 送信前に自動で RAG 同期を実行"
+            >
+              <input
+                type="checkbox"
+                checked={autoSyncOnSynthesize}
+                onChange={(e) => setAutoSyncOnSynthesize(e.target.checked)}
+                disabled={sending}
+                className="h-3 w-3"
+              />
+              送信前に自動同期
+            </label>
+          )}
+          {syncRagStatus && (
+            <span className={theme.phaseLabel} style={{ fontSize: "0.7em" }}>
+              · {syncRagStatus}
+            </span>
+          )}
         </div>
 
         {uploadStatus && (
