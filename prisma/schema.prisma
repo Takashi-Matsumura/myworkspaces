@@ -63,14 +63,26 @@ model Whiteboard {
 // ユーザ固有の RAG サイドカー (myworkspaces-rag-{sub}) 内の Qdrant に格納される。
 // このテーブルは Web UI の一覧表示と削除操作のためのハンドルに過ぎない。
 // id は Qdrant payload 側の doc_id と同値 (1 ドキュメント = 複数チャンク)。
+//
+// Phase E-B-2 で追加:
+//   workspaceId / relativePath: Biz パネルの sync-rag が
+//     reports/<file>.md / research/<file>.md を取り込む時に、同じファイルの再
+//     ingest を upsert で扱うためのユニーク識別子。手動アップロード経路 (旧 /api/rag/upload)
+//     はこれらを NULL のままにする (既存の挙動と互換)。
+//   updatedAt: 最終取り込み時刻 (Biz タブの「最終 ingest 時刻」表示用)。
 model RagDocument {
-  id         String   @id @default(cuid())
-  userId     String
-  filename   String
-  bytes      Int
-  chunkCount Int
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  userId        String
+  filename      String
+  bytes         Int
+  chunkCount    Int
+  workspaceId   String?
+  relativePath  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, workspaceId, relativePath], name: "uniq_user_workspace_path")
   @@index([userId])
+  @@index([userId, updatedAt])
 }

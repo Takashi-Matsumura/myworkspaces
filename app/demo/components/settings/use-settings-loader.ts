@@ -20,6 +20,8 @@ export type BizUsage = {
   cacheSize: number;
   lastErrorAt: number | null;
   lastError: string | null;
+  ragDocCount: number;
+  ragLastIngestAt: number | null;
 };
 
 export type Provider = "llama-server" | "anthropic" | "openai";

@@ -120,6 +120,29 @@ export const BizUsageSchema = z.object({
   cacheSize: z.number(),
   lastErrorAt: z.number().nullable(),
   lastError: z.string().nullable(),
+  // Phase E-B-2 で追加: RAG 取り込みの永続統計
+  ragDocCount: z.number(),
+  ragLastIngestAt: z.number().nullable(),
+});
+
+// Phase E-B-2: sync-rag route のレスポンス
+const SyncedFileSchema = z.object({
+  id: z.string(),
+  relativePath: z.string(),
+  bytes: z.number(),
+  chunkCount: z.number(),
+  updated: z.boolean(),
+});
+
+export const SyncRagResponseSchema = z.object({
+  synced: z.array(SyncedFileSchema),
+  skipped: z.array(SyncedFileSchema),
+  failed: z.array(
+    z.object({
+      relativePath: z.string(),
+      error: z.string(),
+    }),
+  ),
 });
 
 // ===== OpenCode Sessions / Config =====
