@@ -44,17 +44,54 @@ LLAMA_EMBED_URL = os.environ.get(
 )
 # Qdrant の接続先 (同コンテナ内の別プロセス)。
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://127.0.0.1:6333")
-COLLECTION = os.environ.get("RAG_COLLECTION", "docs")
+# Phase F-B-1 以前の単一 collection (legacy / shared)。workspace_id が指定されない
+# リクエスト (旧 UI からの /api/rag/upload など) は引き続きこの collection を使う。
+LEGACY_COLLECTION = os.environ.get("RAG_COLLECTION", "docs")
 # 取得するチャンク数。多すぎるとコンテキスト溢れ、少なすぎると根拠不足。
 TOP_K = int(os.environ.get("RAG_TOP_K", "4"))
 # 埋め込みの一括送信件数。llama-server の /v1/embeddings が配列対応なので batch。
 EMBED_BATCH = int(os.environ.get("RAG_EMBED_BATCH", "16"))
 
+# 後方互換: 既存のコードで `COLLECTION` を参照していた箇所を残す。
+COLLECTION = LEGACY_COLLECTION
+
 app = FastAPI()
 
 qdrant = QdrantClient(url=QDRANT_URL, prefer_grpc=False, timeout=30.0)
-_collection_ready = False
-_collection_lock = asyncio.Lock()
+# Phase F-B-1: collection 名 → ready 状態のキャッシュ。docs_{workspace_id} を
+# 動的に作るため、collection 単位でロック / 状態を保持する。
+_collection_ready: Dict[str, bool] = {}
+_collection_locks: Dict[str, asyncio.Lock] = {}
+_collection_locks_meta_lock = asyncio.Lock()
+
+
+def _sanitize_workspace_id(workspace_id: Optional[str]) -> Optional[str]:
+    """Qdrant collection 名に使える形に validate。
+    cuid 想定で英数 / アンダースコア / ハイフンのみ許容。"""
+    if workspace_id is None:
+        return None
+    if not isinstance(workspace_id, str):
+        return None
+    if len(workspace_id) == 0 or len(workspace_id) > 64:
+        return None
+    if not all(c.isalnum() or c in ("-", "_") for c in workspace_id):
+        return None
+    return workspace_id
+
+
+def _collection_for(workspace_id: Optional[str]) -> str:
+    """workspace_id が与えられれば docs_{id}、無ければ legacy "docs" を返す。"""
+    sanitized = _sanitize_workspace_id(workspace_id)
+    if sanitized is None:
+        return LEGACY_COLLECTION
+    return f"docs_{sanitized}"
+
+
+async def _get_lock(name: str) -> asyncio.Lock:
+    async with _collection_locks_meta_lock:
+        if name not in _collection_locks:
+            _collection_locks[name] = asyncio.Lock()
+        return _collection_locks[name]
 
 
 # ─────────────────────────────────────────────
@@ -87,30 +124,31 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
     return vectors
 
 
-async def ensure_collection(dim: int) -> None:
+async def ensure_collection(collection_name: str, dim: int) -> None:
     """最初の ingest で vector 次元が判ったタイミングで collection を作成する。
 
     BGE-M3 は 1024 / Nomic Embed v1.5 は 768 等、モデルで変わるので起動時に固定しない。
+    Phase F-B-1: collection 単位でロック / ready キャッシュを持ち、workspace 別に独立して create する。
     """
-    global _collection_ready
-    if _collection_ready:
+    if _collection_ready.get(collection_name):
         return
-    async with _collection_lock:
-        if _collection_ready:
+    lock = await _get_lock(collection_name)
+    async with lock:
+        if _collection_ready.get(collection_name):
             return
         try:
-            qdrant.get_collection(COLLECTION)
-            _collection_ready = True
+            qdrant.get_collection(collection_name)
+            _collection_ready[collection_name] = True
             return
         except (UnexpectedResponse, ValueError):
             pass
         qdrant.create_collection(
-            collection_name=COLLECTION,
+            collection_name=collection_name,
             vectors_config=qmodels.VectorParams(
                 size=dim, distance=qmodels.Distance.COSINE
             ),
         )
-        _collection_ready = True
+        _collection_ready[collection_name] = True
 
 
 # ─────────────────────────────────────────────
@@ -123,17 +161,24 @@ async def ingest(
     doc_id: str = Form(...),
     filename: str = Form(...),
     file: UploadFile = File(...),
+    workspace_id: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
+    collection = _collection_for(workspace_id)
     data = await file.read()
     text = extract_text(filename, data)
     chunks = chunk_text(text)
     if not chunks:
-        return {"doc_id": doc_id, "chunk_count": 0, "bytes": len(data)}
+        return {
+            "doc_id": doc_id,
+            "chunk_count": 0,
+            "bytes": len(data),
+            "collection": collection,
+        }
 
     vectors = await embed_texts(chunks)
     if not vectors:
         raise HTTPException(status_code=500, detail="embedding failed")
-    await ensure_collection(len(vectors[0]))
+    await ensure_collection(collection, len(vectors[0]))
 
     points: List[qmodels.PointStruct] = []
     for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
@@ -146,25 +191,32 @@ async def ingest(
                     "filename": filename,
                     "chunk_index": idx,
                     "text": chunk,
+                    "workspace_id": _sanitize_workspace_id(workspace_id),
                 },
             )
         )
-    qdrant.upsert(collection_name=COLLECTION, points=points)
-    return {"doc_id": doc_id, "chunk_count": len(points), "bytes": len(data)}
+    qdrant.upsert(collection_name=collection, points=points)
+    return {
+        "doc_id": doc_id,
+        "chunk_count": len(points),
+        "bytes": len(data),
+        "collection": collection,
+    }
 
 
 @app.get("/documents")
-async def list_documents() -> Dict[str, Any]:
+async def list_documents(workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    collection = _collection_for(workspace_id)
     try:
-        qdrant.get_collection(COLLECTION)
+        qdrant.get_collection(collection)
     except (UnexpectedResponse, ValueError):
-        return {"documents": []}
+        return {"documents": [], "collection": collection}
 
     seen: Dict[str, Dict[str, Any]] = {}
     next_page = None
     while True:
         records, next_page = qdrant.scroll(
-            collection_name=COLLECTION,
+            collection_name=collection,
             limit=256,
             with_payload=True,
             with_vectors=False,
@@ -184,14 +236,17 @@ async def list_documents() -> Dict[str, Any]:
             seen[doc_id]["chunk_count"] += 1
         if next_page is None:
             break
-    return {"documents": list(seen.values())}
+    return {"documents": list(seen.values()), "collection": collection}
 
 
 @app.delete("/documents/{doc_id}")
-async def delete_document(doc_id: str) -> Dict[str, Any]:
+async def delete_document(
+    doc_id: str, workspace_id: Optional[str] = None
+) -> Dict[str, Any]:
+    collection = _collection_for(workspace_id)
     try:
         qdrant.delete(
-            collection_name=COLLECTION,
+            collection_name=collection,
             points_selector=qmodels.FilterSelector(
                 filter=qmodels.Filter(
                     must=[
@@ -205,7 +260,7 @@ async def delete_document(doc_id: str) -> Dict[str, Any]:
         )
     except (UnexpectedResponse, ValueError):
         pass
-    return {"doc_id": doc_id, "deleted": True}
+    return {"doc_id": doc_id, "deleted": True, "collection": collection}
 
 
 # ─────────────────────────────────────────────
@@ -239,21 +294,24 @@ async def search_endpoint(request: Request) -> JSONResponse:
     else:
         top_k = TOP_K
 
+    workspace_id = body.get("workspace_id") if isinstance(body.get("workspace_id"), str) else None
+    collection = _collection_for(workspace_id)
+
     try:
-        qdrant.get_collection(COLLECTION)
+        qdrant.get_collection(collection)
     except (UnexpectedResponse, ValueError):
-        return JSONResponse({"hits": []})
+        return JSONResponse({"hits": [], "collection": collection})
 
     try:
         vectors = await embed_texts([query])
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"embedding failed: {e}")
     if not vectors:
-        return JSONResponse({"hits": []})
+        return JSONResponse({"hits": [], "collection": collection})
 
     try:
         hits = qdrant.search(
-            collection_name=COLLECTION,
+            collection_name=collection,
             query_vector=vectors[0],
             limit=top_k,
             with_payload=True,
@@ -272,7 +330,8 @@ async def search_endpoint(request: Request) -> JSONResponse:
                     "score": h.score,
                 }
                 for h in hits
-            ]
+            ],
+            "collection": collection,
         }
     )
 
@@ -298,11 +357,14 @@ def _extract_last_user_text(messages: List[Dict[str, Any]]) -> str:
     return ""
 
 
-async def _retrieve_context(query: str) -> List[Dict[str, Any]]:
+async def _retrieve_context(
+    query: str, workspace_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     if not query.strip():
         return []
+    collection = _collection_for(workspace_id)
     try:
-        qdrant.get_collection(COLLECTION)
+        qdrant.get_collection(collection)
     except (UnexpectedResponse, ValueError):
         return []
     try:
@@ -312,7 +374,7 @@ async def _retrieve_context(query: str) -> List[Dict[str, Any]]:
     if not vectors:
         return []
     hits = qdrant.search(
-        collection_name=COLLECTION,
+        collection_name=collection,
         query_vector=vectors[0],
         limit=TOP_K,
         with_payload=True,
@@ -358,8 +420,12 @@ async def chat_completions(request: Request) -> Response:
     if not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="messages required")
 
+    # Phase F-B-1: opencode 経由のチャットでも、コンテナ内 OPENAI_BASE_URL の手前で
+    # ヘッダを付与する仕組みは無いため、ここはヘッダがあれば優先し、無ければ legacy
+    # collection (= LEGACY_COLLECTION) を見る。
+    workspace_id = request.headers.get("x-myworkspaces-workspace-id")
     last_user_text = _extract_last_user_text(messages)
-    hits = await _retrieve_context(last_user_text)
+    hits = await _retrieve_context(last_user_text, workspace_id)
     ctx_msg = _build_context_message(hits)
     if ctx_msg is not None:
         # 既存の system メッセージ群を先頭に維持しつつ、RAG コンテキストはその直後に挿入。

@@ -89,10 +89,12 @@ export async function ingestOneFile(
   });
 
   // 既存があれば sidecar から旧チャンクを削除 (失敗しても続行: 孤児が増えるだけ)
+  // Phase F-B-1: workspace 別 collection に切り分けたので、削除も collection 指定が必要。
   if (existing) {
-    await fetch(`${sidecarUrl}/documents/${encodeURIComponent(existing.id)}`, {
-      method: "DELETE",
-    }).catch(() => {});
+    const deleteUrl =
+      `${sidecarUrl}/documents/${encodeURIComponent(existing.id)}` +
+      `?workspace_id=${encodeURIComponent(workspaceId)}`;
+    await fetch(deleteUrl, { method: "DELETE" }).catch(() => {});
   }
 
   // doc_id は既存があればそれを再利用、無ければ新規作成 (Prisma の cuid)
@@ -112,9 +114,11 @@ export async function ingestOneFile(
     ).id;
 
   // sidecar の /ingest に FormData で投げる
+  // Phase F-B-1: workspace_id を付与して docs_{workspaceId} collection に格納。
   const form = new FormData();
   form.append("doc_id", docId);
   form.append("filename", filename);
+  form.append("workspace_id", workspaceId);
   // Buffer → Blob (Node 20+)。relativePath ではなく filename だけ渡す (sidecar 側の payload に保存される)。
   form.append("file", new Blob([new Uint8Array(buffer)]), filename);
 

@@ -14,6 +14,9 @@ export const dynamic = "force-dynamic";
 //
 // body:
 //   { "query": "...", "top_k"?: number }
+// ヘッダ:
+//   X-MyWorkspaces-Workspace-Id (Phase F-B-1) — 指定があれば docs_{id} collection を検索、
+//   無ければ legacy "docs" collection。tool 側は cwd から自動抽出して付与する。
 // 返り値:
 //   { "hits": [{doc_id, filename, chunk_index, text, score}, ...] }
 
@@ -21,6 +24,14 @@ type RequestBody = {
   query?: string;
   top_k?: number;
 };
+
+// 簡易 validate: cuid 想定。collection 名に使われるため厳しめに。
+function sanitizeWorkspaceId(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  if (raw.length === 0 || raw.length > 64) return undefined;
+  if (!/^[A-Za-z0-9_-]+$/.test(raw)) return undefined;
+  return raw;
+}
 
 function unauthorized(reason: string) {
   return NextResponse.json({ error: `unauthorized: ${reason}` }, { status: 401 });
@@ -40,6 +51,8 @@ export async function POST(req: NextRequest) {
 
   const sub = req.headers.get("x-myworkspaces-sub");
   if (!sub) return unauthorized("missing X-MyWorkspaces-Sub");
+
+  const workspaceId = sanitizeWorkspaceId(req.headers.get("x-myworkspaces-workspace-id"));
 
   let body: RequestBody;
   try {
@@ -72,6 +85,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         query: body.query,
         top_k: body.top_k,
+        workspace_id: workspaceId,
       }),
     });
     const text = await resp.text();

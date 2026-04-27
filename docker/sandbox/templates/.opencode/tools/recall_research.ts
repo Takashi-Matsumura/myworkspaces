@@ -34,6 +34,22 @@ function nextjsUrl(): string {
   return (process.env.BIZ_NEXTJS_INTERNAL_URL ?? DEFAULT_NEXTJS_URL).replace(/\/$/, "")
 }
 
+// Phase F-B-1: cwd `/root/workspaces/{id}/...` から workspace_id を抽出する。
+// opencode の `session.directory` が cwd に効いている前提 (lib/docker-session 由来)。
+// 取れなければ undefined → sidecar は legacy collection を見る。
+function detectWorkspaceId(): string | undefined {
+  try {
+    const cwd = process.cwd()
+    const m = cwd.match(/^\/root\/workspaces\/([A-Za-z0-9_-]+)(?:\/|$)/)
+    if (!m) return undefined
+    const id = m[1]
+    if (id.length === 0 || id.length > 64) return undefined
+    return id
+  } catch {
+    return undefined
+  }
+}
+
 async function callInternal(
   body: Record<string, unknown>,
 ): Promise<RecallResponse | { error: string }> {
@@ -51,14 +67,17 @@ async function callInternal(
         "MYWORKSPACES_SUB が未設定です。コンテナ作成時に注入されるはずなので、サイドカー再作成を試してください。",
     }
   }
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "x-biz-tool-token": token,
+    "x-myworkspaces-sub": sub,
+  }
+  const workspaceId = detectWorkspaceId()
+  if (workspaceId) headers["x-myworkspaces-workspace-id"] = workspaceId
   try {
     const resp = await fetch(`${nextjsUrl()}/api/biz/internal/recall`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-biz-tool-token": token,
-        "x-myworkspaces-sub": sub,
-      },
+      headers,
       body: JSON.stringify(body),
     })
     const text = await resp.text()
