@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
@@ -54,10 +56,12 @@
     "@types/react-dom": "^19",
     "@types/tar-stream": "^3.1.4",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }
