@@ -126,6 +126,7 @@ describe("POST /api/biz/internal/recall — 中継", () => {
     expect(JSON.parse(init?.body as string)).toEqual({
       query: "foo",
       top_k: undefined,
+      workspace_id: undefined,
     });
   });
 
@@ -142,6 +143,7 @@ describe("POST /api/biz/internal/recall — 中継", () => {
     expect(JSON.parse(init?.body as string)).toEqual({
       query: "foo",
       top_k: 8,
+      workspace_id: undefined,
     });
   });
 
@@ -176,6 +178,50 @@ describe("POST /api/biz/internal/recall — 中継", () => {
     const json = await resp.json();
     expect(json.error).toContain("rag /search HTTP 502");
     expect(json.error).toContain("embedding failed");
+  });
+
+  it("X-MyWorkspaces-Workspace-Id を sidecar /search の workspace_id に中継する", async () => {
+    ragSidecarUrlSpy.mockResolvedValue("http://127.0.0.1:9090");
+    const fetchSpy = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ hits: [] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const route = await loadRoute();
+    await route.POST(
+      makeReq(
+        { query: "foo" },
+        { ...VALID_HEADERS, "x-myworkspaces-workspace-id": "ws_cuid_123" },
+      ),
+    );
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({
+      query: "foo",
+      top_k: undefined,
+      workspace_id: "ws_cuid_123",
+    });
+  });
+
+  it("不正な workspace_id ヘッダ (記号入り) は無視して legacy 扱い", async () => {
+    ragSidecarUrlSpy.mockResolvedValue("http://127.0.0.1:9090");
+    const fetchSpy = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ hits: [] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const route = await loadRoute();
+    await route.POST(
+      makeReq(
+        { query: "foo" },
+        { ...VALID_HEADERS, "x-myworkspaces-workspace-id": "../docs" },
+      ),
+    );
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({
+      query: "foo",
+      top_k: undefined,
+      workspace_id: undefined,
+    });
   });
 
   it("fetch 自体が throw したら 502", async () => {
