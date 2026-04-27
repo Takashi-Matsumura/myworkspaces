@@ -6,6 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { CodeBlock } from "./code-block";
+import { MermaidBlock } from "./mermaid-block";
 
 // Phase E-C-1: Biz パネルのチャット表示と /biz/preview の両方で使う Markdown レンダラ。
 //
@@ -39,6 +40,10 @@ export function BizMarkdown({
             };
             const lang = /language-(\w+)/.exec(codeCn ?? "")?.[1];
             const text = String(children ?? "");
+            if (lang === "mermaid") {
+              // Phase E-C-2: Mermaid は SVG レンダリングし印刷時もベクトルで綺麗に出す。
+              return <MermaidBlock code={text} />;
+            }
             if (lang) {
               return <CodeBlock language={lang} code={text} />;
             }
