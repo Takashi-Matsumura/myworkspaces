@@ -16,10 +16,11 @@
 
 // 501/502 を 1 度だけリトライする fetch ラッパ。403/4xx は即時失敗 (権限/クエリ問題)。
 // 503 もインフラの一時障害として再試行対象に含める (Tavily で観測あり)。
-const RETRY_STATUSES = new Set([501, 502, 503]);
-const RETRY_BACKOFF_MS = 600;
+// テスト用に export してある (tests/biz/search-provider.test.ts)。
+export const RETRY_STATUSES = new Set([501, 502, 503]);
+export const RETRY_BACKOFF_MS = 600;
 
-async function fetchWithRetry(
+export async function fetchWithRetry(
   input: string | URL,
   init?: RequestInit,
 ): Promise<Response> {
