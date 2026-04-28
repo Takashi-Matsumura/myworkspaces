@@ -37,6 +37,7 @@ import { GeneratingIndicator } from "./chat/generating-indicator";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
 import { BizMarkdown } from "./biz-markdown";
+import { A2AInbox } from "./a2a-inbox";
 
 // Biz パネルのフェーズ。route.ts の BIZ_PREFIXES と対応。
 type BizPhase = "data" | "doc" | "web" | "synth";
@@ -636,6 +637,9 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
         </span>
       </header>
 
+      {/* A2A 受信 Inbox (rope 経由で来た user message を別レーン表示。0 件なら自動非表示) */}
+      <A2AInbox messages={messages} parts={state.parts} theme={theme} />
+
       {/* メイン (活動フィード + ドロワー) */}
       <main className="relative flex flex-1 overflow-hidden">
         <div
@@ -691,31 +695,41 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
               </p>
             </div>
           ) : (
-            groups.map((g) => (
-              <div
-                key={g.key}
-                className={`rounded-lg px-3 py-2 ${
-                  g.role === "user" ? theme.userBubble : theme.assistantBubble
-                }`}
-              >
+            groups.map((g) => {
+              // A2A 経由で inject された user メッセージは Inbox 側に出すので
+              // メインチャットからは除外する。assistant 側はそのまま表示
+              // (A2A 由来であっても通常応答と区別せず流す)。
+              const visibleParts =
+                g.role === "user"
+                  ? g.partIds.filter(({ pid }) => !state.parts[pid]?.raw?.a2a)
+                  : g.partIds;
+              if (visibleParts.length === 0) return null;
+              return (
                 <div
-                  className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
-                  style={{ fontSize: "0.7em" }}
+                  key={g.key}
+                  className={`rounded-lg px-3 py-2 ${
+                    g.role === "user" ? theme.userBubble : theme.assistantBubble
+                  }`}
                 >
-                  {g.role === "user" ? "あなた" : "opencode"}
+                  <div
+                    className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
+                    style={{ fontSize: "0.7em" }}
+                  >
+                    {g.role === "user" ? "あなた" : "opencode"}
+                  </div>
+                  {visibleParts.map(({ pid, messageId }) => {
+                    const p = state.parts[pid];
+                    if (!p) return null;
+                    return (
+                      <MessagePartBiz
+                        key={`${messageId}:${pid}`}
+                        part={p}
+                      />
+                    );
+                  })}
                 </div>
-                {g.partIds.map(({ pid, messageId }) => {
-                  const p = state.parts[pid];
-                  if (!p) return null;
-                  return (
-                    <MessagePartBiz
-                      key={`${messageId}:${pid}`}
-                      part={p}
-                    />
-                  );
-                })}
-              </div>
-            ))
+              );
+            })
           )}
           {busy && <GeneratingIndicator />}
         </div>

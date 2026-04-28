@@ -6,6 +6,7 @@ import {
   SessionInfoSchema,
   SessionsResponseSchema,
 } from "@/lib/api-schemas";
+import { decode as decodeA2A } from "@/lib/a2a/prefix";
 
 // opencode の /event SSE を購読しつつ、セッション / メッセージ / part を
 // まとめて管理する状態ストア。
@@ -294,7 +295,12 @@ function applySseMessage(raw: string, dispatch: (a: Action) => void): void {
         // id/messageID/sessionID/type/text 以外のフィールドは raw に退避し、
         // tool / step-start / step-finish の解釈に使う (parseToolPart 側)。
         const { id, messageID, sessionID, type, text, ...rest } = part;
-        const raw = Object.keys(rest).length > 0 ? rest : undefined;
+        const restRaw = Object.keys(rest).length > 0 ? rest : undefined;
+        // A2A prefix を text の先頭から検出し、raw.a2a に格納する。
+        // 既存 rest と合体 (両方 undefined / 空 でなければマージ)。
+        const a2aMeta = typeof text === "string" ? decodeA2A(text).meta : null;
+        let raw: Record<string, unknown> | undefined = restRaw;
+        if (a2aMeta) raw = { ...(restRaw ?? {}), a2a: a2aMeta };
         dispatch({
           type: "part/updated",
           part: {
@@ -372,6 +378,16 @@ function flattenHistory(raw: unknown): {
         void _sessionID;
         void _type;
         void _text;
+        const partText = typeof pp.text === "string" ? pp.text : "";
+        // SSE 経路と同じく、text 先頭の A2A prefix を raw.a2a に格納する。
+        const a2aMeta = decodeA2A(partText).meta;
+        const baseRaw =
+          Object.keys(rest).length > 0
+            ? (rest as Record<string, unknown>)
+            : undefined;
+        const partRaw = a2aMeta
+          ? { ...(baseRaw ?? {}), a2a: a2aMeta }
+          : baseRaw;
         parts[id] = {
           id,
           messageID:
@@ -379,8 +395,8 @@ function flattenHistory(raw: unknown): {
           sessionID:
             typeof pp.sessionID === "string" ? pp.sessionID : info.sessionID,
           type: typeof pp.type === "string" ? pp.type : "text",
-          text: typeof pp.text === "string" ? pp.text : "",
-          raw: Object.keys(rest).length > 0 ? rest : undefined,
+          text: partText,
+          raw: partRaw,
         };
         partIds.push(id);
       }

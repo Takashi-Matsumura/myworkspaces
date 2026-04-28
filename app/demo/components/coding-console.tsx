@@ -33,6 +33,7 @@ import { GeneratingIndicator } from "./chat/generating-indicator";
 import { CodeBlock } from "./code-block";
 import { PartAsCard } from "./action-card";
 import { ProgressPane } from "./progress-pane";
+import { A2AInbox } from "./a2a-inbox";
 
 // 入力欄上部のクイックテンプレート。小さいモデルでも「計画 → 実装 → 検証」の
 // 手順を踏みやすいように、ツール名 (write / edit / bash) を明示的に指示する。
@@ -363,6 +364,9 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
         </span>
       </header>
 
+      {/* A2A 受信 Inbox (rope 経由で来た user message を別レーン表示。0 件なら自動非表示) */}
+      <A2AInbox messages={messages} parts={state.parts} theme={theme} />
+
       {/* メイン (活動フィード + ドロワー) */}
       <main className="relative flex flex-1 overflow-hidden">
         {/* 背景クリックで閉じる透過オーバーレイ (開時のみクリック有効) */}
@@ -415,31 +419,40 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
               </p>
             </div>
           ) : (
-            groups.map((g) => (
-              <div
-                key={g.key}
-                className={`rounded-lg px-3 py-2 ${
-                  g.role === "user" ? theme.userBubble : theme.assistantBubble
-                }`}
-              >
+            groups.map((g) => {
+              // A2A 経由で inject された user メッセージは Inbox 側に出すので
+              // メインチャットからは除外する。
+              const visibleParts =
+                g.role === "user"
+                  ? g.partIds.filter(({ pid }) => !state.parts[pid]?.raw?.a2a)
+                  : g.partIds;
+              if (visibleParts.length === 0) return null;
+              return (
                 <div
-                  className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
-                  style={{ fontSize: "0.7em" }}
+                  key={g.key}
+                  className={`rounded-lg px-3 py-2 ${
+                    g.role === "user" ? theme.userBubble : theme.assistantBubble
+                  }`}
                 >
-                  {g.role === "user" ? "あなた" : "opencode"}
+                  <div
+                    className={`mb-1 font-semibold uppercase tracking-wide ${theme.bubbleLabel}`}
+                    style={{ fontSize: "0.7em" }}
+                  >
+                    {g.role === "user" ? "あなた" : "opencode"}
+                  </div>
+                  {visibleParts.map(({ pid, messageId }) => {
+                    const p = state.parts[pid];
+                    if (!p) return null;
+                    return (
+                      <MessagePartCoding
+                        key={`${messageId}:${pid}`}
+                        part={p}
+                      />
+                    );
+                  })}
                 </div>
-                {g.partIds.map(({ pid, messageId }) => {
-                  const p = state.parts[pid];
-                  if (!p) return null;
-                  return (
-                    <MessagePartCoding
-                      key={`${messageId}:${pid}`}
-                      part={p}
-                    />
-                  );
-                })}
-              </div>
-            ))
+              );
+            })
           )}
           {busy && <GeneratingIndicator />}
         </div>
