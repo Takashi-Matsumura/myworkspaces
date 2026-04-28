@@ -14,6 +14,7 @@ import {
   HelpCircle,
   TerminalSquare,
   BookOpen,
+  Anchor,
 } from "lucide-react";
 import type { View, SceneRect } from "./whiteboard-canvas";
 import type { BackTab } from "./back-tabs-panel";
@@ -181,6 +182,9 @@ export default function FloatingTerminal({
   slot = "left",
   z,
   onFocus,
+  onGeoChange,
+  onActiveSessionChange,
+  onAnchorPointerDown,
 }: {
   view: View;
   session: TerminalSession | null;
@@ -190,6 +194,14 @@ export default function FloatingTerminal({
   slot?: "left" | "center" | "right";
   z: number;
   onFocus?: () => void;
+  // Phase 3 (A2A):
+  // - onGeoChange: scenePos/sceneSize 変化時に呼ばれる。null は unmount 通知
+  // - onActiveSessionChange: 内部の Console (Biz/Code) の activeId 変化を中継
+  // - onAnchorPointerDown: アンカー (⚓) ボタンの mousedown を親に通知
+  //   → 親側で D&D 状態を hold して RopeLayer に渡す
+  onGeoChange?: (geo: { x: number; y: number; w: number; h: number } | null) => void;
+  onActiveSessionChange?: (sessionId: string | null) => void;
+  onAnchorPointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void;
 }) {
   const style = VARIANT_STYLES[variant];
 
@@ -251,6 +263,26 @@ export default function FloatingTerminal({
     minW: 320,
     minH: 180,
   });
+
+  // Phase 3: A2A registry に scenePos/sceneSize を通知。最新 callback は ref 経由で
+  // 参照することで、callback 自体が変わっても deps 変動を起こさない。
+  const onGeoChangeRef = useRef(onGeoChange);
+  useEffect(() => {
+    onGeoChangeRef.current = onGeoChange;
+  }, [onGeoChange]);
+  useEffect(() => {
+    onGeoChangeRef.current?.({
+      x: scenePos.x,
+      y: scenePos.y,
+      w: sceneSize.w,
+      h: sceneSize.h,
+    });
+  }, [scenePos.x, scenePos.y, sceneSize.w, sceneSize.h]);
+  useEffect(() => {
+    return () => {
+      onGeoChangeRef.current?.(null);
+    };
+  }, []);
 
   const handleFlip = () => {
     if (!flipped && backNonce === 0) setBackNonce(Date.now());
@@ -453,11 +485,17 @@ export default function FloatingTerminal({
             >
               {isChatFront ? (
                 variant === "coding" ? (
-                  <CodingConsole fontSize={fontSize} />
+                  <CodingConsole
+                    fontSize={fontSize}
+                    onActiveSessionChange={onActiveSessionChange}
+                  />
                 ) : variant === "analyze" ? (
                   <AnalysisConsole fontSize={fontSize} />
                 ) : (
-                  <BusinessConsole fontSize={fontSize} />
+                  <BusinessConsole
+                    fontSize={fontSize}
+                    onActiveSessionChange={onActiveSessionChange}
+                  />
                 )
               ) : session ? (
                 <XtermView
@@ -551,6 +589,28 @@ export default function FloatingTerminal({
         )}
       </div>
 
+      {/* A2A アンカー (⚓): biz / code パネルのみ右辺中央に配置。
+          parent に pointerdown を中継して D&D 開始してもらう。
+          フリップ状態に関わらず常に同位置に出る (rotating wrapper の外)。 */}
+      {onAnchorPointerDown && (variant === "business" || variant === "coding") && (
+        <button
+          type="button"
+          title="ロープを伸ばす (相手パネルへドラッグ)"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onAnchorPointerDown(e);
+          }}
+          className="absolute flex h-6 w-6 cursor-grab items-center justify-center rounded-full border border-white/40 bg-black/70 text-white shadow-md hover:bg-black/85 active:cursor-grabbing"
+          style={{
+            right: -10,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 1,
+          }}
+        >
+          <Anchor className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
