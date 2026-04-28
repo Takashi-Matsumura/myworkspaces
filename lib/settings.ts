@@ -141,6 +141,7 @@ export function buildOpencodeJson(settings: UserSettings): string {
       agent: {
         plan: { temperature: 0.4, top_p: 0.95 },
         build: { temperature: 0.2, top_p: 0.9 },
+        business: { temperature: 0.1, top_p: 0.9 },
       },
     };
     return JSON.stringify(config, null, 2) + "\n";
