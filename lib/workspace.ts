@@ -205,6 +205,7 @@ export async function createWorkspaceDirectory(
 const TEMPLATE_AGENT_DEFAULTS: Record<string, { temperature: number; top_p: number }> = {
   plan: { temperature: 0.4, top_p: 0.95 },
   build: { temperature: 0.2, top_p: 0.9 },
+  business: { temperature: 0.1, top_p: 0.9 },
 };
 
 // 既存ワークスペースにテンプレートの最新設定を再配布する。
