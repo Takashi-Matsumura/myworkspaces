@@ -22,7 +22,11 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["tests/biz/**/*.test.ts", "tests/api/**/*.test.ts"],
+          include: [
+            "tests/biz/**/*.test.ts",
+            "tests/api/**/*.test.ts",
+            "tests/a2a/**/*.test.ts",
+          ],
           isolate: true,
           globals: false,
         },
