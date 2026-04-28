@@ -100,7 +100,14 @@ const CODING_TEMPLATES: {
 // コンポーザ / 思考ログは共通部品を再利用する。tool / step-start / step-finish
 // パートをカードとして可視化し、markdown 内コードは prism-react-renderer で
 // ハイライトする点が Business との差別化ポイント。
-export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) {
+export default function CodingConsole({
+  fontSize = 13,
+  onActiveSessionChange,
+}: {
+  fontSize?: number;
+  // Phase 3 (A2A): 親から activeId を観測したい時に渡す。
+  onActiveSessionChange?: (sessionId: string | null) => void;
+}) {
   const theme = CHAT_THEMES.coding;
   const {
     state,
@@ -114,6 +121,20 @@ export default function CodingConsole({ fontSize = 13 }: { fontSize?: number }) 
   } = useOpencodeStream();
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  // A2A panel registry: activeId 変化を親に通知。unmount 時は null。
+  const onActiveSessionChangeRef = useRef(onActiveSessionChange);
+  useEffect(() => {
+    onActiveSessionChangeRef.current = onActiveSessionChange;
+  }, [onActiveSessionChange]);
+  useEffect(() => {
+    onActiveSessionChangeRef.current?.(activeId);
+  }, [activeId]);
+  useEffect(() => {
+    return () => {
+      onActiveSessionChangeRef.current?.(null);
+    };
+  }, []);
+
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [agent, setAgent] = useState<"plan" | "build">("build");

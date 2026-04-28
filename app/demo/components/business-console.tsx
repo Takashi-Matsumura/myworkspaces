@@ -182,7 +182,15 @@ const PHASE_BUTTONS: {
 
 // Biz パネル: ビジネス向けマルチモーダル分析 + (Phase B 以降) DeepSearch。
 // Coding/Analyze と同じ opencode サイドカーを共有し、variant + mode で挙動を分ける。
-export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }) {
+export default function BusinessConsole({
+  fontSize = 13,
+  onActiveSessionChange,
+}: {
+  fontSize?: number;
+  // Phase 3 (A2A): 親から activeId を観測したい時に渡す。
+  // session 切替で呼ばれ、null は「セッション未選択」を意味する。
+  onActiveSessionChange?: (sessionId: string | null) => void;
+}) {
   const theme = CHAT_THEMES.business;
   const {
     state,
@@ -196,6 +204,21 @@ export default function BusinessConsole({ fontSize = 13 }: { fontSize?: number }
   } = useOpencodeStream();
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  // A2A panel registry に通知。callback ref で最新参照を保ちつつ、
+  // unmount 時には null を emit してロープから外せるようにする。
+  const onActiveSessionChangeRef = useRef(onActiveSessionChange);
+  useEffect(() => {
+    onActiveSessionChangeRef.current = onActiveSessionChange;
+  }, [onActiveSessionChange]);
+  useEffect(() => {
+    onActiveSessionChangeRef.current?.(activeId);
+  }, [activeId]);
+  useEffect(() => {
+    return () => {
+      onActiveSessionChangeRef.current?.(null);
+    };
+  }, []);
+
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [phase, setPhase] = useState<BizPhase>("data");
