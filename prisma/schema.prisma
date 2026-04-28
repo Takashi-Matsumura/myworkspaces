@@ -24,6 +24,7 @@ model User {
   whiteboard      Whiteboard?
   ragDocuments    RagDocument[]
   shareLinks      ShareLink[]
+  ropes           Rope[]
 }
 
 model Session {
@@ -39,12 +40,12 @@ model Session {
 }
 
 model Workspace {
-  id            String   @id
-  userId        String
-  label         String
-  createdAt     DateTime @default(now())
-  lastOpenedAt  DateTime @default(now())
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id
+  userId       String
+  label        String
+  createdAt    DateTime @default(now())
+  lastOpenedAt DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -72,16 +73,16 @@ model Whiteboard {
 //     はこれらを NULL のままにする (既存の挙動と互換)。
 //   updatedAt: 最終取り込み時刻 (Biz タブの「最終 ingest 時刻」表示用)。
 model RagDocument {
-  id            String   @id @default(cuid())
-  userId        String
-  filename      String
-  bytes         Int
-  chunkCount    Int
-  workspaceId   String?
-  relativePath  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String
+  filename     String
+  bytes        Int
+  chunkCount   Int
+  workspaceId  String?
+  relativePath String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId, relativePath], name: "uniq_user_workspace_path")
   @@index([userId])
@@ -108,4 +109,47 @@ model ShareLink {
   @@unique([userId, workspaceId, relativePath], name: "uniq_share_user_workspace_path")
   @@index([userId])
   @@index([token])
+}
+
+// A2A (Agent-to-Agent) ロープ。Biz パネルと Code パネルの opencode session を
+// 結び、片方の session.idle を観測すると assistant 応答を抽出して相手 session に
+// inject する watch 型自動 relay。v1 は session-to-session バインド (ユーザが
+// session を切替えたらロープを作り直す)。
+//
+// hopLimit: ホップ数上限 (default 5)。これを超えるメッセージは relay しない。
+// active: false にすると listener から外される (キルスイッチ)。
+model Rope {
+  id            String       @id @default(cuid())
+  userId        String
+  fromPanel     String // "biz" | "code"
+  toPanel       String // "biz" | "code"
+  fromSessionId String // opencode session.id
+  toSessionId   String
+  hopLimit      Int          @default(5)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      A2AMessage[]
+
+  @@index([userId, active])
+  @@index([fromSessionId])
+}
+
+// ロープ経由で relay されたメッセージの監査ログ。
+// delivered: true 相手 session に POST 成功、false スキップされた (skipReason 参照)。
+// contentHash: SHA-256 hex。直近 N 件と一致したら dedup でスキップ。
+// contentPreview: 先頭 200 文字 (audit / debug 用、本文全体は保存しない)。
+model A2AMessage {
+  id             String   @id @default(cuid())
+  ropeId         String
+  fromPanel      String
+  hopCount       Int
+  contentHash    String
+  contentPreview String
+  delivered      Boolean  @default(false)
+  skipReason     String? // "hopLimit" | "dedup" | null
+  createdAt      DateTime @default(now())
+  rope           Rope     @relation(fields: [ropeId], references: [id], onDelete: Cascade)
+
+  @@index([ropeId, createdAt])
 }

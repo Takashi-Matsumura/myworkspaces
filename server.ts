@@ -11,6 +11,7 @@ import {
 } from "./lib/docker-session";
 import { getUser } from "./lib/user";
 import { DEFAULT_WS_PATH } from "./lib/ws-protocol";
+import { prewarmA2aListeners } from "./lib/a2a/listener";
 
 const port = Number(process.env.PORT) || 3000;
 const dev = process.env.NODE_ENV !== "production";
@@ -107,6 +108,15 @@ async function main(): Promise<void> {
     );
     console.log(`[server] pty WebSocket at ws://localhost:${port}${DEFAULT_WS_PATH}`);
   });
+
+  // active rope を持つユーザの A2A listener を起動する。listener はサイドカー
+  // が無ければ接続失敗 → 5s リトライを繰り返すので、ユーザがログインしてサイドカー
+  // が立ち上がった時点で自動的に拾う。
+  try {
+    await prewarmA2aListeners();
+  } catch (err) {
+    console.warn("[server] A2A prewarm failed", err);
+  }
 }
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
